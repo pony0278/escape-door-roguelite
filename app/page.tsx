@@ -608,7 +608,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P1.0</p>
+            <p>PHASE P1.1</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -736,7 +736,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>固定關卡核心測試</span>
+        <span>2.5D 第三人稱追逐測試</span>
         <p>
           {phase === "planning"
             ? "拖曳或依序點擊節點畫線 · Backspace 返回 · Esc 清除"
@@ -1004,8 +1004,48 @@ function RunningScreen({
   seenClueIds: ClueId[];
   onFocus: () => void;
 }) {
+  const segmentCount = Math.max(1, route.nodeIds.length - 1);
+  const segmentProgress = Math.min(
+    segmentCount - 0.0001,
+    progress * segmentCount,
+  );
+  const segmentIndex = Math.max(0, Math.floor(segmentProgress));
+  const segmentFromId = route.nodeIds[segmentIndex] ?? route.nodeIds[0];
+  const segmentToId =
+    route.nodeIds[segmentIndex + 1] ?? route.nodeIds.at(-1) ?? segmentFromId;
+  const segmentFrom = MAP_NODE_LOOKUP[segmentFromId];
+  const segmentTo = MAP_NODE_LOOKUP[segmentToId];
+  const verticalDelta = segmentTo.y - segmentFrom.y;
+  const turnValue =
+    Math.abs(verticalDelta) < 36 ? 0 : verticalDelta < 0 ? -1 : 1;
+  const turnClass =
+    turnValue < 0 ? "turn-left" : turnValue > 0 ? "turn-right" : "turn-straight";
+  const turnLabel =
+    turnValue < 0 ? "前方左轉" : turnValue > 0 ? "前方右轉" : "保持直行";
+  const routePressure = Math.min(
+    1,
+    Math.max(0, (route.durationMs - 7600) / 6900),
+  );
+  const monsterPressure = Math.min(
+    1,
+    progress * (0.66 + routePressure * 0.48),
+  );
+  const monsterDistance = Math.max(
+    3,
+    Math.round(23 - progress * (12 + routePressure * 8)),
+  );
+  const chaseState =
+    progress < 0.11
+      ? "lookback"
+      : monsterDistance <= 7
+        ? "close"
+        : "tracking";
+  const currentNodeNumber = Math.min(segmentIndex + 2, route.nodeIds.length);
+
   const stageStyle = {
     "--progress": progress,
+    "--monster-pressure": monsterPressure,
+    "--route-turn": turnValue,
   } as CSSProperties;
 
   return (
@@ -1031,30 +1071,87 @@ function RunningScreen({
         </div>
       </div>
 
-      <div className="corridor-stage" style={stageStyle}>
-        <div className="ceiling-lights" />
-        <div className="corridor-back" />
-        <div className="corridor-lines" />
-        <div className="passing-doors passing-doors-a">
-          <span>01</span><span>02</span><span>03</span><span>04</span>
+      <div
+        className={`chase-stage ${turnClass} chase-${chaseState}`}
+        style={stageStyle}
+        aria-label={`第三人稱追逐演出，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
+      >
+        <div className="chase-world" aria-hidden="true">
+          <div className="vanishing-glow" />
+          <div className="tunnel-ribs">
+            {Array.from({ length: 9 }, (_, index) => (
+              <i
+                className="tunnel-rib"
+                key={index}
+                style={{ "--rib-index": index } as CSSProperties}
+              />
+            ))}
+          </div>
+          <div className="ceiling-track">
+            <span /><span /><span /><span />
+          </div>
+          <div className="chase-wall chase-wall-left">
+            <span>配電</span><span>B1</span><span>維修</span><span>禁入</span>
+          </div>
+          <div className="chase-wall chase-wall-right">
+            <span>出口</span><span>04</span><span>機房</span><span>警告</span>
+          </div>
+          <div className="chase-floor">
+            <span className="floor-center-line" />
+          </div>
+          <div className="speed-streaks speed-streaks-left" />
+          <div className="speed-streaks speed-streaks-right" />
         </div>
-        <div className="passing-doors passing-doors-b">
-          <span>05</span><span>06</span><span>07</span><span>08</span>
-        </div>
-        <div className="floor-speed-lines" />
 
-        <div className="killer-shadow" aria-hidden="true">
-          <span />
+        <div className="chase-cinematic-label" aria-hidden="true">
+          <span>{chaseState === "lookback" ? "回頭確認" : "路線執行中"}</span>
+          <b>
+            {chaseState === "lookback"
+              ? "牠追上來了"
+              : chaseState === "close"
+                ? "不要回頭"
+                : turnLabel}
+          </b>
         </div>
 
-        <div className="runner" aria-label="正在奔跑的玩家角色">
-          <span className="runner-head" />
-          <span className="runner-body" />
-          <span className="runner-arm runner-arm-a" />
-          <span className="runner-arm runner-arm-b" />
-          <span className="runner-leg runner-leg-a" />
-          <span className="runner-leg runner-leg-b" />
-          <span className="key-spark">◆</span>
+        <div className="monster-lookback" aria-hidden="true">
+          <span className="monster-horns" />
+          <span className="monster-head">
+            <i className="monster-eye monster-eye-left" />
+            <i className="monster-eye monster-eye-right" />
+            <i className="monster-mouth" />
+          </span>
+          <span className="monster-shoulders" />
+          <span className="monster-arm monster-arm-left" />
+          <span className="monster-arm monster-arm-right" />
+        </div>
+
+        <div className="monster-ground-shadow" aria-hidden="true" />
+        <div className="monster-claw monster-claw-left" aria-hidden="true">
+          <i /><i /><i />
+        </div>
+        <div className="monster-claw monster-claw-right" aria-hidden="true">
+          <i /><i /><i />
+        </div>
+
+        <div className="chase-runner" aria-label="正在依照手繪路線奔跑的玩家">
+          <span className="chase-runner-head">
+            <i />
+          </span>
+          <span className="chase-runner-neck" />
+          <span className="chase-runner-torso" />
+          <span className="chase-backpack">
+            <i>逃</i>
+            <b>◆</b>
+          </span>
+          <span className="chase-runner-arm chase-runner-arm-left" />
+          <span className="chase-runner-arm chase-runner-arm-right" />
+          <span className="chase-runner-leg chase-runner-leg-left">
+            <i />
+          </span>
+          <span className="chase-runner-leg chase-runner-leg-right">
+            <i />
+          </span>
         </div>
 
         {activeClue && (
@@ -1077,6 +1174,22 @@ function RunningScreen({
             <small>記住，不會自動保存完整答案</small>
           </div>
         )}
+
+        <div className={`chase-distance-hud ${monsterDistance <= 7 ? "danger" : ""}`}>
+          <span>追擊距離</span>
+          <b>{monsterDistance}m</b>
+          <i>
+            <em style={{ width: `${Math.max(7, (1 - monsterPressure) * 100)}%` }} />
+          </i>
+        </div>
+
+        <div className="route-camera-hud">
+          <span>
+            路段 {currentNodeNumber}/{route.nodeIds.length}
+          </span>
+          <b>{segmentTo.label}</b>
+          <small>{turnLabel}</small>
+        </div>
 
         <div className="run-progress">
           <span style={{ width: `${progress * 100}%` }} />
