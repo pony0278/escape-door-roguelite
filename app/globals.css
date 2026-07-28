@@ -3603,3 +3603,179 @@ button:focus-visible {
   width: 100%;
   height: 100%;
 }
+
+/* P2.0 true-3D chase stage */
+.runner-3d-stage {
+  height: 560px;
+  border-color: rgba(154, 190, 183, 0.48);
+  background: #102832;
+  perspective: none;
+  box-shadow:
+    inset 0 0 90px rgba(0, 0, 0, 0.32),
+    0 22px 62px rgba(0, 0, 0, 0.3);
+}
+
+.runner-3d-stage::before {
+  z-index: 20;
+  border: 6px solid rgba(3, 11, 13, 0.22);
+  background:
+    linear-gradient(180deg, rgba(4, 13, 15, 0.12), transparent 21%),
+    linear-gradient(90deg, rgba(2, 8, 10, 0.3), transparent 13% 87%, rgba(2, 8, 10, 0.3));
+  box-shadow:
+    inset 0 0 82px rgba(0, 0, 0, calc(0.16 + var(--monster-pressure) * 0.22)),
+    inset 0 -40px 58px rgba(0, 0, 0, 0.28);
+}
+
+.runner-3d-stage::after {
+  z-index: 19;
+  opacity: calc(var(--monster-pressure) * 0.28);
+  background:
+    radial-gradient(circle at 15% 75%, rgba(255, 58, 49, 0.28), transparent 25%),
+    radial-gradient(circle, transparent 45%, rgba(255, 61, 47, 0.42) 145%);
+}
+
+.runner-3d-mount {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(111, 220, 226, 0.14), transparent 27%),
+    #102832;
+}
+
+.runner-3d-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.runner-3d-status {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  background: #102832;
+  color: #edf8f2;
+  text-align: center;
+}
+
+.runner-3d-status-failed,
+.runner-3d-mount[data-render-state="ready"] .runner-3d-status {
+  display: none;
+}
+
+.runner-3d-mount[data-render-state="failed"] .runner-3d-status-loading {
+  display: none;
+}
+
+.runner-3d-mount[data-render-state="failed"] .runner-3d-status-failed {
+  display: grid;
+}
+
+.runner-3d-status span {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 12px;
+  place-items: center;
+  border: 1px solid rgba(216, 244, 93, 0.58);
+  border-radius: 50%;
+  color: var(--acid);
+  font-size: 20px;
+  animation: runner-3d-loader 0.9s linear infinite;
+}
+
+.runner-3d-status b {
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+
+.runner-3d-status small {
+  margin-top: 6px;
+  color: #91a9a6;
+  font-size: 10px;
+}
+
+.runner-3d-stage .chase-cinematic-label {
+  top: 10%;
+  border-top-color: rgba(216, 244, 93, 0.66);
+  border-bottom-color: rgba(216, 244, 93, 0.25);
+  background:
+    linear-gradient(90deg, transparent, rgba(5, 17, 20, 0.82), transparent);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72);
+}
+
+.runner-3d-stage .route-camera-hud,
+.runner-3d-stage .chase-distance-hud {
+  border-color: rgba(174, 204, 198, 0.42);
+  background: rgba(5, 16, 18, 0.76);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+}
+
+.runner-3d-stage .route-camera-hud span,
+.runner-3d-stage .route-camera-hud small,
+.runner-3d-stage .chase-distance-hud span {
+  color: #9db1ae;
+}
+
+.runner-3d-stage .clue-target {
+  top: 32%;
+  right: 13%;
+  width: 92px;
+  height: 92px;
+  border: 2px solid rgba(216, 244, 93, 0.75);
+  background:
+    radial-gradient(circle, rgba(255, 240, 177, 0.94) 0 16%, transparent 17%),
+    rgba(8, 28, 28, 0.8);
+  box-shadow:
+    0 0 0 8px rgba(216, 244, 93, 0.08),
+    0 0 40px rgba(216, 244, 93, 0.32);
+}
+
+.runner-3d-stage .focused-clue {
+  border-color: rgba(216, 244, 93, 0.66);
+  background: rgba(6, 20, 20, 0.92);
+}
+
+.runner-3d-stage .run-progress {
+  bottom: 34px;
+  right: 26px;
+  left: 26px;
+}
+
+.runner-3d-stage .run-distance {
+  right: 26px;
+  bottom: 8px;
+  left: 26px;
+  color: rgba(225, 241, 235, 0.68);
+  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes runner-3d-loader {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .runner-3d-stage {
+    height: 490px;
+  }
+
+  .runner-3d-stage .chase-cinematic-label {
+    top: 18%;
+  }
+
+  .runner-3d-stage .clue-target {
+    top: 36%;
+    right: 6%;
+    width: 76px;
+    height: 76px;
+  }
+}
