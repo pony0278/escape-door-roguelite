@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 type TurnDirection = -1 | 0 | 1;
+type ClueKind = "turn" | "knock" | null;
 
 interface RunnerScene3DProps {
   progress: number;
@@ -11,11 +12,146 @@ interface RunnerScene3DProps {
   monsterPressure: number;
   monsterDistance: number;
   clueActive: boolean;
+  clueKind: ClueKind;
+  clueText: string;
 }
 
 const CHUNK_LENGTH = 18;
 const CHUNK_COUNT = 7;
 const RUN_SPEED = 12.5;
+const CORRIDOR_HALF_WIDTH = 6.1;
+
+function makeConcreteTexture(
+  renderer: THREE.WebGLRenderer,
+  tone: "wall" | "floor" | "tile",
+) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const base =
+    tone === "wall" ? "#575a57" : tone === "floor" ? "#343836" : "#484d4c";
+  context.fillStyle = base;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const seed = tone === "wall" ? 37 : tone === "floor" ? 83 : 131;
+  for (let index = 0; index < 3200; index += 1) {
+    const x = (index * 73 + seed * 19) % canvas.width;
+    const y = (index * 151 + seed * 29) % canvas.height;
+    const light = ((index * 17 + seed) % 100) / 100;
+    context.fillStyle =
+      light > 0.66
+        ? `rgba(220, 220, 208, ${0.012 + light * 0.026})`
+        : `rgba(5, 9, 8, ${0.018 + (1 - light) * 0.04})`;
+    const radius = 0.5 + ((index * 23) % 19) / 7;
+    context.fillRect(x, y, radius, radius);
+  }
+
+  const stains = tone === "wall" ? 24 : 14;
+  for (let index = 0; index < stains; index += 1) {
+    const x = (index * 97 + seed * 11) % canvas.width;
+    const y = (index * 43 + seed * 31) % canvas.height;
+    const gradient = context.createRadialGradient(x, y, 1, x, y, 28 + (index % 5) * 9);
+    gradient.addColorStop(0, "rgba(13, 22, 19, 0.18)");
+    gradient.addColorStop(1, "rgba(13, 22, 19, 0)");
+    context.fillStyle = gradient;
+    context.fillRect(x - 80, y - 80, 160, 160);
+  }
+
+  context.strokeStyle = "rgba(12, 15, 14, 0.24)";
+  context.lineWidth = tone === "tile" ? 4 : 1.4;
+  if (tone === "tile") {
+    for (let position = 0; position <= 512; position += 128) {
+      context.beginPath();
+      context.moveTo(position, 0);
+      context.lineTo(position, 512);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(0, position);
+      context.lineTo(512, position);
+      context.stroke();
+    }
+  } else {
+    for (let index = 0; index < 11; index += 1) {
+      const startX = (index * 91 + seed * 7) % 512;
+      const startY = (index * 57 + seed * 17) % 512;
+      context.beginPath();
+      context.moveTo(startX, startY);
+      context.lineTo(startX + 8, startY + 17);
+      context.lineTo(startX - 5, startY + 31);
+      context.lineTo(startX + 13, startY + 49);
+      context.stroke();
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(tone === "floor" ? 3 : 2, tone === "floor" ? 8 : 4);
+  texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  return texture;
+}
+
+function makeWallClueTexture(text: string, kind: Exclude<ClueKind, null>) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  const accent = kind === "turn" ? "#e8e0c1" : "#c34c43";
+  context.strokeStyle = accent;
+  context.fillStyle = accent;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  context.globalAlpha = 0.24;
+  for (let index = 0; index < 16; index += 1) {
+    context.lineWidth = 2 + (index % 4);
+    context.beginPath();
+    context.moveTo(95 + index * 48, 386 + ((index * 29) % 38));
+    context.lineTo(160 + index * 46, 368 + ((index * 17) % 64));
+    context.stroke();
+  }
+
+  context.globalAlpha = 0.92;
+  context.font = "900 118px 'Noto Sans TC', 'PingFang TC', sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.shadowColor = "rgba(0, 0, 0, 0.8)";
+  context.shadowBlur = 5;
+  context.fillText(text || (kind === "turn" ? "右轉 × 2" : "敲門 × 3"), 526, 245);
+
+  context.shadowBlur = 0;
+  context.font = "700 34px ui-monospace, monospace";
+  context.textAlign = "left";
+  context.fillText(kind === "turn" ? "LOCK / TURN" : "DOOR / KNOCK", 126, 105);
+
+  context.lineWidth = 18;
+  context.beginPath();
+  if (kind === "turn") {
+    context.arc(875, 125, 52, 0.45, Math.PI * 1.85);
+    context.lineTo(839, 82);
+    context.moveTo(875, 177);
+    context.lineTo(906, 151);
+  } else {
+    for (let index = 0; index < 3; index += 1) {
+      context.moveTo(840 + index * 44, 75);
+      context.lineTo(825 + index * 44, 155);
+    }
+  }
+  context.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  return texture;
+}
 
 export default function RunnerScene3D({
   progress,
@@ -23,6 +159,8 @@ export default function RunnerScene3D({
   monsterPressure,
   monsterDistance,
   clueActive,
+  clueKind,
+  clueText,
 }: RunnerScene3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneStateRef = useRef({
@@ -31,7 +169,10 @@ export default function RunnerScene3D({
     monsterPressure,
     monsterDistance,
     clueActive,
+    clueKind,
+    clueText,
   });
+
   useEffect(() => {
     sceneStateRef.current = {
       progress,
@@ -39,8 +180,18 @@ export default function RunnerScene3D({
       monsterPressure,
       monsterDistance,
       clueActive,
+      clueKind,
+      clueText,
     };
-  }, [clueActive, monsterDistance, monsterPressure, progress, turn]);
+  }, [
+    clueActive,
+    clueKind,
+    clueText,
+    monsterDistance,
+    monsterPressure,
+    progress,
+    turn,
+  ]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -60,45 +211,50 @@ export default function RunnerScene3D({
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.55));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = 0.9;
     renderer.domElement.className = "runner-3d-canvas";
     renderer.domElement.setAttribute("aria-hidden", "true");
     mount.prepend(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x102832);
-    scene.fog = new THREE.Fog(0x102832, 20, 88);
+    scene.background = new THREE.Color(0x030605);
+    scene.fog = new THREE.FogExp2(0x070b0a, 0.042);
 
-    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 180);
-    camera.position.set(0, 5.1, 9.8);
+    const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 150);
+    camera.position.set(0, 4.8, 9.2);
 
-    const hemi = new THREE.HemisphereLight(0xdff7ff, 0x233428, 2.5);
-    scene.add(hemi);
+    const ambient = new THREE.HemisphereLight(0x899895, 0x080a09, 0.48);
+    scene.add(ambient);
 
-    const keyLight = new THREE.DirectionalLight(0xfff0c6, 3.3);
-    keyLight.position.set(-7, 12, 8);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(1024, 1024);
-    keyLight.shadow.camera.left = -14;
-    keyLight.shadow.camera.right = 14;
-    keyLight.shadow.camera.top = 17;
-    keyLight.shadow.camera.bottom = -8;
-    scene.add(keyLight);
+    const flashlight = new THREE.SpotLight(
+      0xffecc6,
+      15,
+      34,
+      Math.PI / 5.2,
+      0.58,
+      1.35,
+    );
+    flashlight.position.set(0, 4.45, 6.3);
+    flashlight.castShadow = true;
+    flashlight.shadow.mapSize.set(1024, 1024);
+    flashlight.shadow.camera.near = 0.4;
+    flashlight.shadow.camera.far = 38;
+    flashlight.target.position.set(0, 1.9, -12);
+    scene.add(flashlight, flashlight.target);
 
-    const rimLight = new THREE.DirectionalLight(0x6edbe8, 1.45);
-    rimLight.position.set(9, 7, -10);
-    scene.add(rimLight);
+    const coldFill = new THREE.DirectionalLight(0x6a8588, 0.34);
+    coldFill.position.set(6, 8, -12);
+    scene.add(coldFill);
 
-    const dangerLight = new THREE.PointLight(0xff493f, 0, 10, 2);
-    dangerLight.position.set(-1.7, 2.3, 2.8);
+    const dangerLight = new THREE.PointLight(0xb92018, 0, 9, 2);
     scene.add(dangerLight);
 
-    const gradientData = new Uint8Array([45, 120, 205, 255]);
+    const gradientData = new Uint8Array([22, 72, 132, 220]);
     const gradientMap = new THREE.DataTexture(
       gradientData,
       4,
@@ -118,19 +274,50 @@ export default function RunnerScene3D({
       return material;
     };
 
+    const concreteTexture = makeConcreteTexture(renderer, "wall");
+    const floorTexture = makeConcreteTexture(renderer, "floor");
+    const tileTexture = makeConcreteTexture(renderer, "tile");
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x727570,
+      map: concreteTexture,
+      roughness: 0.94,
+      metalness: 0.02,
+    });
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x515553,
+      map: floorTexture,
+      roughness: 0.88,
+      metalness: 0.03,
+    });
+    const tileMaterial = new THREE.MeshStandardMaterial({
+      color: 0x666d6b,
+      map: tileTexture,
+      roughness: 0.78,
+      metalness: 0.04,
+    });
+    const ceilingMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2e3230,
+      roughness: 0.98,
+    });
+    const pipeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x333a38,
+      roughness: 0.7,
+      metalness: 0.4,
+    });
+    const wetMaterial = new THREE.MeshStandardMaterial({
+      color: 0x161c1a,
+      roughness: 0.18,
+      metalness: 0.05,
+      transparent: true,
+      opacity: 0.58,
+    });
+
     const palette = {
-      ink: 0x23323f,
-      cream: 0xfff7df,
-      lime: 0xd8f45d,
-      amber: 0xf6ae42,
-      cyan: 0x69d2db,
-      blue: 0x527fae,
-      coral: 0xff776c,
-      green: 0x68bb87,
-      floor: 0x394b4f,
-      lane: 0x58696c,
-      steel: 0xaebdb8,
-      dark: 0x101718,
+      ink: 0x171c1c,
+      cream: 0xd8d7cb,
+      amber: 0x765a30,
+      blue: 0x334d5b,
+      warning: 0xd05242,
     };
 
     function addMesh(
@@ -153,126 +340,122 @@ export default function RunnerScene3D({
 
     const world = new THREE.Group();
     scene.add(world);
-    const roadChunks: THREE.Group[] = [];
+    const corridorChunks: THREE.Group[] = [];
+    const ceilingLights: THREE.PointLight[] = [];
 
-    function createRoadChunk(index: number) {
+    function createCorridorChunk(index: number) {
       const chunk = new THREE.Group();
       chunk.position.z = -index * CHUNK_LENGTH;
 
       addMesh(
-        new THREE.BoxGeometry(13.5, 0.36, CHUNK_LENGTH),
-        toon(palette.floor),
+        new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 0.34, CHUNK_LENGTH),
+        floorMaterial,
         chunk,
-        [0, -0.18, 0],
+        [0, -0.17, 0],
       );
-
-      for (const laneX of [-3.2, 0, 3.2]) {
-        addMesh(
-          new THREE.BoxGeometry(2.78, 0.09, CHUNK_LENGTH - 0.2),
-          toon(palette.lane),
-          chunk,
-          [laneX, 0.045, 0],
-        );
-
-        for (const edge of [-1.32, 1.32]) {
-          addMesh(
-            new THREE.BoxGeometry(0.065, 0.075, CHUNK_LENGTH),
-            toon(palette.lime),
-            chunk,
-            [laneX + edge, 0.115, 0],
-          );
-        }
-      }
-
-      for (let z = -CHUNK_LENGTH / 2; z < CHUNK_LENGTH / 2; z += 2.25) {
-        addMesh(
-          new THREE.BoxGeometry(12.4, 0.035, 0.055),
-          toon(0x738286),
-          chunk,
-          [0, 0.105, z],
-        );
-      }
+      addMesh(
+        new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 0.38, CHUNK_LENGTH),
+        ceilingMaterial,
+        chunk,
+        [0, 6.12, 0],
+      );
 
       for (const side of [-1, 1]) {
         addMesh(
-          new THREE.BoxGeometry(3.4, 0.48, CHUNK_LENGTH),
-          toon(0x273b39),
+          new THREE.BoxGeometry(0.5, 6.2, CHUNK_LENGTH),
+          wallMaterial,
           chunk,
-          [side * 8.25, -0.03, 0],
+          [side * CORRIDOR_HALF_WIDTH, 3.03, 0],
         );
-
-        for (const z of [-6, 0, 6]) {
-          const prop = new THREE.Group();
-          prop.position.set(side * (7.25 + (index % 2) * 0.4), 0, z);
-          chunk.add(prop);
-
-          const colors = [
-            palette.coral,
-            palette.cyan,
-            palette.amber,
-            palette.green,
-          ];
-          const color = colors[(index + (z + 6) / 6) % colors.length];
-          const height = 1.4 + ((index + z) % 3 + 3) % 3 * 0.42;
-
-          addMesh(
-            new THREE.BoxGeometry(1.45, height, 1.45),
-            toon(color),
-            prop,
-            [0, height / 2, 0],
-          );
-          addMesh(
-            new THREE.BoxGeometry(1.68, 0.2, 1.68),
-            toon(palette.cream),
-            prop,
-            [0, height + 0.07, 0],
-          );
-
-          const warning = addMesh(
-            new THREE.BoxGeometry(0.7, 0.28, 0.08),
-            toon(palette.lime),
-            prop,
-            [0, height * 0.66, side < 0 ? 0.77 : -0.77],
-          );
-          warning.rotation.y = side < 0 ? 0 : Math.PI;
-        }
-
         addMesh(
-          new THREE.BoxGeometry(0.24, 5.1, 0.24),
-          toon(palette.steel),
+          new THREE.BoxGeometry(0.035, 2.15, CHUNK_LENGTH - 0.08),
+          tileMaterial,
           chunk,
-          [side * 6.5, 2.55, -7.4],
+          [side * (CORRIDOR_HALF_WIDTH - 0.27), 1.08, 0],
+        );
+        addMesh(
+          new THREE.BoxGeometry(0.16, 0.16, CHUNK_LENGTH),
+          pipeMaterial,
+          chunk,
+          [side * 5.62, 5.46, 0],
+        );
+      }
+
+      for (let z = -CHUNK_LENGTH / 2; z < CHUNK_LENGTH / 2; z += 2.1) {
+        addMesh(
+          new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2 - 0.42, 0.025, 0.048),
+          toon(0x222827),
+          chunk,
+          [0, 0.035, z],
+        );
+      }
+
+      for (const z of [-6.2, 0, 6.2]) {
+        addMesh(
+          new THREE.BoxGeometry(2.2 + ((index + z) % 2) * 0.6, 0.018, 3.2),
+          wetMaterial,
+          chunk,
+          [index % 2 ? -2.4 : 2.1, 0.027, z],
+        );
+      }
+
+      for (const x of [-3.9, -2.95]) {
+        addMesh(
+          new THREE.CylinderGeometry(0.1, 0.1, CHUNK_LENGTH, 10),
+          pipeMaterial,
+          chunk,
+          [x, 5.75, 0],
+          [Math.PI / 2, 0, 0],
         );
       }
 
       addMesh(
-        new THREE.BoxGeometry(13.25, 0.24, 0.24),
-        toon(palette.steel),
+        new THREE.BoxGeometry(2.65, 0.12, 0.58),
+        toon(index % 3 === 1 ? 0x303735 : 0x9f9a78),
         chunk,
-        [0, 5.06, -7.4],
-      );
+        [0, 5.93, -5.8],
+      ).castShadow = false;
 
-      for (const x of [-3.9, 0, 3.9]) {
-        const lamp = addMesh(
-          new THREE.BoxGeometry(1.55, 0.12, 0.5),
-          toon(palette.lime),
-          chunk,
-          [x, 4.88, -7.35],
+      const overhead = new THREE.PointLight(
+        index % 3 === 1 ? 0x64716c : 0xc6c09d,
+        index % 3 === 1 ? 0.16 : 1.25,
+        11,
+        2.1,
+      );
+      overhead.position.set(0, 5.65, -5.8);
+      chunk.add(overhead);
+      ceilingLights.push(overhead);
+
+      if (index % 2 === 0) {
+        const warningStripe = new THREE.Group();
+        warningStripe.position.set(
+          index % 4 === 0 ? -5.79 : 5.79,
+          3.5,
+          5.3,
         );
-        lamp.castShadow = false;
+        warningStripe.rotation.y = index % 4 === 0 ? Math.PI / 2 : -Math.PI / 2;
+        chunk.add(warningStripe);
+        for (let stripe = 0; stripe < 4; stripe += 1) {
+          addMesh(
+            new THREE.BoxGeometry(0.12, 0.42, 1.15),
+            toon(stripe % 2 ? 0x332b27 : 0x755d32),
+            warningStripe,
+            [(stripe - 1.5) * 0.13, 0, 0],
+            [0, 0, -0.38],
+          );
+        }
       }
 
       world.add(chunk);
-      roadChunks.push(chunk);
+      corridorChunks.push(chunk);
     }
 
     for (let index = 0; index < CHUNK_COUNT; index += 1) {
-      createRoadChunk(index);
+      createCorridorChunk(index);
     }
 
     const player = new THREE.Group();
     scene.add(player);
-
     const bodyRoot = new THREE.Group();
     player.add(bodyRoot);
 
@@ -309,7 +492,7 @@ export default function RunnerScene3D({
 
     addMesh(
       new THREE.CapsuleGeometry(0.7, 1, 8, 18),
-      toon(0xa7b8ad),
+      toon(0x596863),
       bodyRoot,
       [0, 1.65, 0],
     );
@@ -340,16 +523,16 @@ export default function RunnerScene3D({
     );
     addMesh(
       new THREE.BoxGeometry(0.74, 0.52, 0.16),
-      toon(0x9b5f26),
+      toon(0x453322),
       bodyRoot,
       [0, 1.74, 0.96],
     );
     addMesh(
-      new THREE.OctahedronGeometry(0.22, 0),
-      toon(palette.lime),
+      new THREE.CylinderGeometry(0.12, 0.12, 0.5, 12),
+      toon(0xb8ae85),
       bodyRoot,
-      [0.28, 1.38, 1.07],
-      [0, 0, Math.PI / 4],
+      [0.42, 1.52, 1.03],
+      [Math.PI / 2, 0, 0],
     );
 
     const headRoot = new THREE.Group();
@@ -376,43 +559,42 @@ export default function RunnerScene3D({
     );
     addMesh(
       new THREE.CapsuleGeometry(0.09, 0.6, 5, 10),
-      toon(0xffb4c3),
+      toon(0x9b666e),
       headRoot,
       [-0.34, 0.9, -0.18],
       [0, 0, -0.08],
     );
     addMesh(
       new THREE.CapsuleGeometry(0.09, 0.6, 5, 10),
-      toon(0xffb4c3),
+      toon(0x9b666e),
       headRoot,
       [0.34, 0.9, -0.18],
       [0, 0, 0.08],
     );
 
     const playerShadowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x061010,
+      color: 0x010202,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.5,
       depthWrite: false,
     });
     const playerShadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.86, 32),
+      new THREE.CircleGeometry(0.92, 32),
       playerShadowMaterial,
     );
     playerShadow.rotation.x = -Math.PI / 2;
-    playerShadow.position.set(0, 0.018, 0.15);
+    playerShadow.position.set(0, 0.02, 0.15);
     scene.add(playerShadow);
 
     const monster = new THREE.Group();
-    monster.position.set(-1.6, 0, 2.6);
-    monster.scale.setScalar(0.68);
+    monster.position.set(-1.6, 0, 2.9);
+    monster.scale.setScalar(0.65);
     scene.add(monster);
-
     const monsterBody = new THREE.Group();
     monster.add(monsterBody);
     addMesh(
       new THREE.CapsuleGeometry(0.86, 1.55, 8, 16),
-      toon(0x111515),
+      toon(0x050707),
       monsterBody,
       [0, 1.48, 0],
       [0, 0, 0],
@@ -420,44 +602,42 @@ export default function RunnerScene3D({
     );
     addMesh(
       new THREE.SphereGeometry(0.72, 18, 14),
-      toon(0x171819),
+      toon(0x060808),
       monsterBody,
       [0, 2.84, 0],
     );
     addMesh(
       new THREE.ConeGeometry(0.24, 0.88, 5),
-      toon(0x0b0d0d),
+      toon(0x030404),
       monsterBody,
       [-0.38, 3.55, 0],
       [0, 0, -0.25],
     );
     addMesh(
       new THREE.ConeGeometry(0.24, 0.88, 5),
-      toon(0x0b0d0d),
+      toon(0x030404),
       monsterBody,
       [0.38, 3.55, 0],
       [0, 0, 0.25],
     );
 
-    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xff3c35 });
-    const leftEye = addMesh(
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xd52b21 });
+    addMesh(
       new THREE.SphereGeometry(0.095, 10, 8),
       eyeMaterial,
       monsterBody,
       [-0.23, 2.94, 0.67],
       [0, 0, 0],
       [1.45, 0.56, 0.5],
-    );
-    const rightEye = addMesh(
+    ).castShadow = false;
+    addMesh(
       new THREE.SphereGeometry(0.095, 10, 8),
       eyeMaterial,
       monsterBody,
       [0.23, 2.94, 0.67],
       [0, 0, 0],
       [1.45, 0.56, 0.5],
-    );
-    leftEye.castShadow = false;
-    rightEye.castShadow = false;
+    ).castShadow = false;
 
     const leftMonsterArm = new THREE.Group();
     const rightMonsterArm = new THREE.Group();
@@ -466,42 +646,72 @@ export default function RunnerScene3D({
     monsterBody.add(leftMonsterArm, rightMonsterArm);
     addMesh(
       new THREE.CapsuleGeometry(0.25, 1.18, 6, 12),
-      toon(0x0b0e0e),
+      toon(0x030505),
       leftMonsterArm,
       [0, -0.5, 0],
     );
     addMesh(
       new THREE.CapsuleGeometry(0.25, 1.18, 6, 12),
-      toon(0x0b0e0e),
+      toon(0x030505),
       rightMonsterArm,
       [0, -0.5, 0],
     );
 
-    const clue = new THREE.Group();
-    clue.visible = false;
-    scene.add(clue);
-    addMesh(
-      new THREE.TorusGeometry(0.6, 0.09, 10, 32),
-      toon(palette.lime),
-      clue,
-      [0, 0, 0],
-      [Math.PI / 2, 0, 0],
+    const wallClue = new THREE.Group();
+    wallClue.visible = false;
+    scene.add(wallClue);
+    const clueBacking = addMesh(
+      new THREE.PlaneGeometry(5.25, 2.65),
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      }),
+      wallClue,
     );
-    addMesh(
-      new THREE.OctahedronGeometry(0.35, 0),
-      toon(palette.amber),
-      clue,
-    );
-    const clueLight = new THREE.PointLight(0xd8f45d, 2.2, 7, 2);
-    clue.add(clueLight);
+    clueBacking.castShadow = false;
+    const clueLight = new THREE.PointLight(0xf0d9ac, 0, 9, 2);
+    wallClue.add(clueLight);
+    let clueTexture: THREE.CanvasTexture | null = null;
+    let renderedClueKey = "";
+    let clueSide = 1;
+
+    function updateWallClue(text: string, kind: Exclude<ClueKind, null>) {
+      const key = `${kind}:${text}`;
+      if (key === renderedClueKey) return;
+      renderedClueKey = key;
+      clueTexture?.dispose();
+      clueTexture = makeWallClueTexture(text, kind);
+      const oldMaterial = clueBacking.material;
+      clueBacking.material = new THREE.MeshBasicMaterial({
+        map: clueTexture,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      oldMaterial.dispose();
+      clueSide = kind === "turn" ? -1 : 1;
+      wallClue.position.set(
+        clueSide * (CORRIDOR_HALF_WIDTH - 0.3),
+        3.1,
+        -14,
+      );
+      wallClue.rotation.set(
+        0,
+        clueSide < 0 ? Math.PI / 2 - 0.08 : -Math.PI / 2 + 0.08,
+        kind === "turn" ? -0.025 : 0.035,
+      );
+      clueLight.color.set(kind === "turn" ? 0xf0d9ac : 0xc03229);
+      clueLight.position.set(0, 0.2, 1.8);
+    }
 
     const dustGeometry = new THREE.BufferGeometry();
     const dustPoints: number[] = [];
-    for (let index = 0; index < 120; index += 1) {
+    for (let index = 0; index < 150; index += 1) {
       dustPoints.push(
-        THREE.MathUtils.randFloatSpread(13),
-        Math.random() * 4.8 + 0.25,
-        -Math.random() * 75,
+        THREE.MathUtils.randFloatSpread(11),
+        Math.random() * 5.4 + 0.15,
+        -Math.random() * 78,
       );
     }
     dustGeometry.setAttribute(
@@ -509,10 +719,10 @@ export default function RunnerScene3D({
       new THREE.Float32BufferAttribute(dustPoints, 3),
     );
     const dustMaterial = new THREE.PointsMaterial({
-      color: 0xdff6dc,
-      size: 0.045,
+      color: 0xc3c6b5,
+      size: 0.035,
       transparent: true,
-      opacity: 0.36,
+      opacity: 0.34,
       depthWrite: false,
     });
     const dust = new THREE.Points(dustGeometry, dustMaterial);
@@ -529,7 +739,7 @@ export default function RunnerScene3D({
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.55));
     }
 
     const resizeObserver = new ResizeObserver(resize);
@@ -564,7 +774,7 @@ export default function RunnerScene3D({
       );
       playerShadow.position.x = player.position.x;
 
-      for (const chunk of roadChunks) {
+      for (const chunk of corridorChunks) {
         chunk.position.z += RUN_SPEED * dt;
         if (chunk.position.z > CHUNK_LENGTH) {
           chunk.position.z -= CHUNK_LENGTH * CHUNK_COUNT;
@@ -573,20 +783,27 @@ export default function RunnerScene3D({
 
       world.rotation.y = THREE.MathUtils.damp(
         world.rotation.y,
-        current.turn * -0.035,
+        current.turn * -0.016,
         3.6,
         dt,
       );
       world.position.x = THREE.MathUtils.damp(
         world.position.x,
-        current.turn * -0.28,
+        current.turn * -0.2,
         3.6,
         dt,
       );
 
+      ceilingLights.forEach((light, index) => {
+        if (index % 3 === 1) {
+          light.intensity =
+            Math.sin(elapsed * 13 + index * 2.3) > 0.74 ? 0.54 : 0.08;
+        }
+      });
+
       const targetMonsterX = -1.55 + current.turn * 0.42;
-      const targetMonsterZ = 3.25 - current.monsterPressure * 1.72;
-      const targetMonsterScale = 0.62 + current.monsterPressure * 0.38;
+      const targetMonsterZ = 3.35 - current.monsterPressure * 1.78;
+      const targetMonsterScale = 0.6 + current.monsterPressure * 0.39;
       monster.position.x = THREE.MathUtils.damp(
         monster.position.x,
         targetMonsterX,
@@ -601,39 +818,39 @@ export default function RunnerScene3D({
       );
       monster.position.y = Math.abs(Math.sin(elapsed * 9.4)) * 0.08;
       monster.scale.setScalar(
-        THREE.MathUtils.damp(
-          monster.scale.x,
-          targetMonsterScale,
-          2.8,
-          dt,
-        ),
+        THREE.MathUtils.damp(monster.scale.x, targetMonsterScale, 2.8, dt),
       );
       monsterBody.rotation.z = Math.sin(elapsed * 4.7) * 0.045;
       leftMonsterArm.rotation.x = -swing * 0.58;
       rightMonsterArm.rotation.x = swing * 0.58;
       dangerLight.intensity =
-        0.4 + current.monsterPressure * 2.2 +
-        Math.abs(Math.sin(elapsed * 5.5)) * 0.18;
+        0.08 +
+        current.monsterPressure * 0.75 +
+        Math.max(0, Math.sin(elapsed * 5.5)) * 0.12;
       dangerLight.position.copy(monster.position);
-      dangerLight.position.y += 2.35;
-      dangerLight.position.z += 0.6;
+      dangerLight.position.y += 2.4;
+      dangerLight.position.z += 0.45;
 
-      if (current.clueActive && !previousClueActive) {
-        clue.position.set(3.15, 1.65, -13);
-        clue.visible = true;
+      if (
+        current.clueActive &&
+        current.clueKind &&
+        (!previousClueActive ||
+          renderedClueKey !== `${current.clueKind}:${current.clueText}`)
+      ) {
+        updateWallClue(current.clueText, current.clueKind);
+        wallClue.visible = true;
         clueTraveling = true;
       }
       previousClueActive = current.clueActive;
 
       if (clueTraveling) {
-        clue.position.z += RUN_SPEED * dt;
-        clue.rotation.y += dt * 2.8;
-        clue.rotation.z = Math.sin(elapsed * 4) * 0.2;
-        const pulse = 1 + Math.sin(elapsed * 7) * 0.08;
-        clue.scale.setScalar(pulse);
-        if (!current.clueActive || clue.position.z > 3.4) {
-          clue.visible = false;
+        wallClue.position.z += RUN_SPEED * dt;
+        clueLight.intensity =
+          1.1 + Math.max(0, Math.sin(elapsed * 6.2)) * 0.55;
+        if (!current.clueActive || wallClue.position.z > 4.8) {
+          wallClue.visible = false;
           clueTraveling = false;
+          clueLight.intensity = 0;
         }
       }
 
@@ -642,14 +859,22 @@ export default function RunnerScene3D({
 
       camera.position.x = THREE.MathUtils.damp(
         camera.position.x,
-        player.position.x * 0.24 + current.turn * 0.25,
+        player.position.x * 0.24 + current.turn * 0.22,
         4,
         dt,
       );
       camera.position.y =
-        5.1 + Math.sin(elapsed * 11.5) * 0.025 +
-        current.monsterPressure * 0.08;
-      camera.lookAt(player.position.x * 0.18, 1.5, -5.9);
+        4.8 + Math.sin(elapsed * 11.5) * 0.022 +
+        current.monsterPressure * 0.06;
+      camera.lookAt(player.position.x * 0.18, 1.55, -6.4);
+
+      flashlight.position.x = camera.position.x * 0.76;
+      flashlight.target.position.x = player.position.x * 0.45;
+      flashlight.target.position.y = 2.05;
+      flashlight.target.position.z = -13.5;
+      flashlight.intensity =
+        14.2 + Math.sin(elapsed * 1.7) * 0.35 -
+        current.monsterPressure * 1.15;
 
       renderer.render(scene, camera);
     }
@@ -669,6 +894,10 @@ export default function RunnerScene3D({
           : [object.material];
         for (const material of materials) material.dispose();
       });
+      clueTexture?.dispose();
+      concreteTexture?.dispose();
+      floorTexture?.dispose();
+      tileTexture?.dispose();
       dustGeometry.dispose();
       dustMaterial.dispose();
       playerShadowMaterial.dispose();
@@ -686,8 +915,8 @@ export default function RunnerScene3D({
     >
       <div className="runner-3d-status runner-3d-status-loading">
         <span>◇</span>
-        <b>正在建立逃生通道</b>
-        <small>載入角色、光影與追逐場景</small>
+        <b>正在建立地下通道</b>
+        <small>載入水泥牆面、手電筒與追逐場景</small>
       </div>
       <div className="runner-3d-status runner-3d-status-failed">
         <span>!</span>
