@@ -3963,6 +3963,108 @@ button:focus-visible {
   cursor: ew-resize;
 }
 
+.run-pause-button {
+  position: absolute;
+  z-index: 50;
+  top: 16px;
+  left: 50%;
+  display: grid;
+  min-width: 118px;
+  min-height: 44px;
+  padding: 7px 12px;
+  grid-template-columns: 24px auto 18px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(207, 213, 204, 0.5);
+  border-radius: 8px;
+  background: rgba(7, 11, 9, 0.88);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.34);
+  color: #edf0e9;
+  font-family: var(--font-mono);
+  transform: translateX(-50%);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.run-pause-button:hover,
+.run-pause-button:focus-visible {
+  border-color: rgba(225, 218, 183, 0.82);
+  background: rgba(21, 25, 21, 0.94);
+  outline: none;
+}
+
+.run-pause-button > span {
+  color: #ded3ad;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.run-pause-button > b {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.run-pause-button > small {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(184, 193, 185, 0.36);
+  border-radius: 4px;
+  color: #9aa69f;
+  font-size: 8px;
+}
+
+.run-pause-button.paused {
+  border-color: rgba(226, 208, 143, 0.82);
+  background: rgba(43, 38, 22, 0.94);
+  box-shadow:
+    0 0 0 3px rgba(226, 208, 143, 0.08),
+    0 9px 30px rgba(0, 0, 0, 0.42);
+}
+
+.run-paused-overlay {
+  position: absolute;
+  z-index: 27;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(11, 15, 12, 0.16), rgba(3, 5, 4, 0.48));
+  color: #f0eee3;
+  text-align: center;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.9);
+}
+
+.run-paused-overlay > span {
+  margin-bottom: 8px;
+  color: #d8ceaa;
+  font: 800 10px/1 var(--font-mono);
+  letter-spacing: 0.34em;
+}
+
+.run-paused-overlay > b {
+  font-size: clamp(22px, 3vw, 34px);
+  letter-spacing: 0.08em;
+}
+
+.run-paused-overlay > small {
+  margin-top: 8px;
+  color: #c1c9c2;
+  font: 700 10px/1.45 var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.runner-3d-stage.is-paused .chase-cinematic-label {
+  opacity: 0.2;
+}
+
+.runner-3d-stage.is-paused .run-progress span {
+  transition: none;
+}
+
 @media (max-width: 720px) {
   .scene-tuning-panel {
     top: 10px;
@@ -3973,5 +4075,14 @@ button:focus-visible {
   .scene-tuning-body {
     max-height: 360px;
     overflow: auto;
+  }
+
+  .run-pause-button {
+    top: 62px;
+    min-width: 106px;
+  }
+
+  .run-paused-overlay > small {
+    max-width: 240px;
   }
 }
