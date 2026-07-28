@@ -6,6 +6,26 @@ import * as THREE from "three";
 type TurnDirection = -1 | 0 | 1;
 type ClueKind = "turn" | "knock" | null;
 
+export interface SceneTuning {
+  exposure: number;
+  concrete: number;
+  ambient: number;
+  flashlight: number;
+  ceiling: number;
+  fog: number;
+  vignette: number;
+}
+
+export const DEFAULT_SCENE_TUNING: SceneTuning = {
+  exposure: 1.14,
+  concrete: 1,
+  ambient: 1.02,
+  flashlight: 18,
+  ceiling: 2.15,
+  fog: 0.028,
+  vignette: 0.48,
+};
+
 interface RunnerScene3DProps {
   progress: number;
   turn: TurnDirection;
@@ -14,6 +34,7 @@ interface RunnerScene3DProps {
   clueActive: boolean;
   clueKind: ClueKind;
   clueText: string;
+  tuning: SceneTuning;
 }
 
 const CHUNK_LENGTH = 18;
@@ -161,6 +182,7 @@ export default function RunnerScene3D({
   clueActive,
   clueKind,
   clueText,
+  tuning,
 }: RunnerScene3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneStateRef = useRef({
@@ -171,6 +193,7 @@ export default function RunnerScene3D({
     clueActive,
     clueKind,
     clueText,
+    tuning,
   });
 
   useEffect(() => {
@@ -182,6 +205,7 @@ export default function RunnerScene3D({
       clueActive,
       clueKind,
       clueText,
+      tuning,
     };
   }, [
     clueActive,
@@ -190,6 +214,7 @@ export default function RunnerScene3D({
     monsterDistance,
     monsterPressure,
     progress,
+    tuning,
     turn,
   ]);
 
@@ -216,24 +241,31 @@ export default function RunnerScene3D({
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.14;
+    renderer.toneMappingExposure = DEFAULT_SCENE_TUNING.exposure;
     renderer.domElement.className = "runner-3d-canvas";
     renderer.domElement.setAttribute("aria-hidden", "true");
     mount.prepend(renderer.domElement);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x121816);
-    scene.fog = new THREE.FogExp2(0x151b18, 0.028);
+    scene.fog = new THREE.FogExp2(
+      0x151b18,
+      DEFAULT_SCENE_TUNING.fog,
+    );
 
     const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 150);
     camera.position.set(0, 4.8, 9.2);
 
-    const ambient = new THREE.HemisphereLight(0xc2c9c3, 0x232a26, 1.02);
+    const ambient = new THREE.HemisphereLight(
+      0xc2c9c3,
+      0x232a26,
+      DEFAULT_SCENE_TUNING.ambient,
+    );
     scene.add(ambient);
 
     const flashlight = new THREE.SpotLight(
       0xffecc6,
-      18.5,
+      DEFAULT_SCENE_TUNING.flashlight,
       40,
       Math.PI / 4.7,
       0.62,
@@ -315,6 +347,10 @@ export default function RunnerScene3D({
       transparent: true,
       opacity: 0.58,
     });
+    const wallBaseColor = new THREE.Color(0xb7bab4);
+    const floorBaseColor = new THREE.Color(0x8c918d);
+    const tileBaseColor = new THREE.Color(0xaeb4b1);
+    const ceilingBaseColor = new THREE.Color(0x5a605c);
 
     const palette = {
       ink: 0x171c1c,
@@ -422,7 +458,9 @@ export default function RunnerScene3D({
 
       const overhead = new THREE.PointLight(
         index % 3 === 1 ? 0x64716c : 0xc6c09d,
-        index % 3 === 1 ? 0.38 : 2.15,
+        index % 3 === 1
+          ? DEFAULT_SCENE_TUNING.ceiling * 0.18
+          : DEFAULT_SCENE_TUNING.ceiling,
         14,
         1.85,
       );
@@ -757,6 +795,24 @@ export default function RunnerScene3D({
       const current = sceneStateRef.current;
       const swing = Math.sin(elapsed * 11.5) * 0.74;
 
+      renderer.toneMappingExposure = current.tuning.exposure;
+      ambient.intensity = current.tuning.ambient;
+      if (scene.fog instanceof THREE.FogExp2) {
+        scene.fog.density = current.tuning.fog;
+      }
+      wallMaterial.color
+        .copy(wallBaseColor)
+        .multiplyScalar(current.tuning.concrete);
+      floorMaterial.color
+        .copy(floorBaseColor)
+        .multiplyScalar(current.tuning.concrete);
+      tileMaterial.color
+        .copy(tileBaseColor)
+        .multiplyScalar(current.tuning.concrete);
+      ceilingMaterial.color
+        .copy(ceilingBaseColor)
+        .multiplyScalar(current.tuning.concrete);
+
       leftLegPivot.rotation.x = swing;
       rightLegPivot.rotation.x = -swing;
       leftArmPivot.rotation.x = -swing * 0.82;
@@ -801,7 +857,11 @@ export default function RunnerScene3D({
       ceilingLights.forEach((light, index) => {
         if (index % 3 === 1) {
           light.intensity =
-            Math.sin(elapsed * 13 + index * 2.3) > 0.74 ? 0.95 : 0.24;
+            Math.sin(elapsed * 13 + index * 2.3) > 0.74
+              ? current.tuning.ceiling * 0.44
+              : current.tuning.ceiling * 0.11;
+        } else {
+          light.intensity = current.tuning.ceiling;
         }
       });
 
@@ -877,7 +937,7 @@ export default function RunnerScene3D({
       flashlight.target.position.y = 2.05;
       flashlight.target.position.z = -13.5;
       flashlight.intensity =
-        18 + Math.sin(elapsed * 1.7) * 0.4 -
+        current.tuning.flashlight + Math.sin(elapsed * 1.7) * 0.4 -
         current.monsterPressure * 0.75;
 
       renderer.render(scene, camera);
