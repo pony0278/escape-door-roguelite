@@ -3640,8 +3640,8 @@ button:focus-visible {
   inset: 0;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 28%, rgba(111, 220, 226, 0.14), transparent 27%),
-    #102832;
+    radial-gradient(circle at 50% 48%, rgba(138, 133, 110, 0.09), transparent 30%),
+    #030605;
 }
 
 .runner-3d-canvas {
@@ -3660,7 +3660,7 @@ button:focus-visible {
   display: grid;
   align-content: center;
   justify-items: center;
-  background: #102832;
+  background: #030605;
   color: #edf8f2;
   text-align: center;
 }
@@ -3704,18 +3704,18 @@ button:focus-visible {
 
 .runner-3d-stage .chase-cinematic-label {
   top: 10%;
-  border-top-color: rgba(216, 244, 93, 0.66);
-  border-bottom-color: rgba(216, 244, 93, 0.25);
+  border-top-color: rgba(194, 186, 159, 0.46);
+  border-bottom-color: rgba(194, 186, 159, 0.18);
   background:
-    linear-gradient(90deg, transparent, rgba(5, 17, 20, 0.82), transparent);
+    linear-gradient(90deg, transparent, rgba(4, 7, 6, 0.88), transparent);
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72);
 }
 
 .runner-3d-stage .route-camera-hud,
 .runner-3d-stage .chase-distance-hud {
-  border-color: rgba(174, 204, 198, 0.42);
-  background: rgba(5, 16, 18, 0.76);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  border-color: rgba(136, 145, 139, 0.34);
+  background: rgba(3, 6, 5, 0.82);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
 }
 
 .runner-3d-stage .route-camera-hud span,
@@ -3725,22 +3725,42 @@ button:focus-visible {
 }
 
 .runner-3d-stage .clue-target {
-  top: 32%;
-  right: 13%;
-  width: 92px;
-  height: 92px;
-  border: 2px solid rgba(216, 244, 93, 0.75);
+  top: 34%;
+  width: 104px;
+  height: 104px;
+  border: 1px solid rgba(235, 224, 193, 0.72);
   background:
-    radial-gradient(circle, rgba(255, 240, 177, 0.94) 0 16%, transparent 17%),
-    rgba(8, 28, 28, 0.8);
+    radial-gradient(circle, rgba(235, 224, 193, 0.22) 0 10%, transparent 11%),
+    rgba(7, 10, 9, 0.48);
   box-shadow:
-    0 0 0 8px rgba(216, 244, 93, 0.08),
-    0 0 40px rgba(216, 244, 93, 0.32);
+    0 0 0 8px rgba(235, 224, 193, 0.035),
+    0 0 34px rgba(239, 222, 178, 0.18);
+  backdrop-filter: blur(2px);
+}
+
+.runner-3d-stage .clue-target.clue-wall-turn {
+  right: auto;
+  left: 10%;
+}
+
+.runner-3d-stage .clue-target.clue-wall-knock {
+  right: 10%;
+  left: auto;
+  border-color: rgba(195, 76, 67, 0.74);
+  box-shadow:
+    0 0 0 8px rgba(195, 76, 67, 0.04),
+    0 0 34px rgba(195, 76, 67, 0.2);
+}
+
+.runner-3d-stage .clue-target small {
+  color: rgba(242, 231, 202, 0.86);
+  letter-spacing: 0.08em;
 }
 
 .runner-3d-stage .focused-clue {
-  border-color: rgba(216, 244, 93, 0.66);
-  background: rgba(6, 20, 20, 0.92);
+  border-color: rgba(203, 191, 157, 0.58);
+  background: rgba(4, 7, 6, 0.94);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.46);
 }
 
 .runner-3d-stage .run-progress {
@@ -3774,8 +3794,39 @@ button:focus-visible {
 
   .runner-3d-stage .clue-target {
     top: 36%;
-    right: 6%;
     width: 76px;
     height: 76px;
   }
+
+  .runner-3d-stage .clue-target.clue-wall-turn {
+    left: 4%;
+  }
+
+  .runner-3d-stage .clue-target.clue-wall-knock {
+    right: 4%;
+  }
+}
+
+/* P2.1 · underground concrete corridor */
+.runner-3d-stage {
+  background:
+    radial-gradient(circle at 50% 58%, rgba(133, 133, 112, 0.12), transparent 38%),
+    #020403;
+  border-color: rgba(112, 119, 113, 0.62);
+  box-shadow:
+    inset 0 0 80px rgba(0, 0, 0, 0.74),
+    0 24px 80px rgba(0, 0, 0, 0.48);
+}
+
+.runner-3d-stage::after {
+  background:
+    radial-gradient(
+      ellipse at 50% 56%,
+      transparent 22%,
+      rgba(0, 0, 0, 0.3) 58%,
+      rgba(0, 0, 0, 0.82) 100%
+    ),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.38), transparent 32%, rgba(0, 0, 0, 0.24));
+  mix-blend-mode: multiply;
+  opacity: 0.88;
 }
