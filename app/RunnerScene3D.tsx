@@ -32,7 +32,7 @@ function makeConcreteTexture(
   if (!context) return null;
 
   const base =
-    tone === "wall" ? "#575a57" : tone === "floor" ? "#343836" : "#484d4c";
+    tone === "wall" ? "#969993" : tone === "floor" ? "#676c68" : "#858a87";
   context.fillStyle = base;
   context.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -43,8 +43,8 @@ function makeConcreteTexture(
     const light = ((index * 17 + seed) % 100) / 100;
     context.fillStyle =
       light > 0.66
-        ? `rgba(220, 220, 208, ${0.012 + light * 0.026})`
-        : `rgba(5, 9, 8, ${0.018 + (1 - light) * 0.04})`;
+        ? `rgba(235, 234, 220, ${0.018 + light * 0.025})`
+        : `rgba(14, 18, 16, ${0.012 + (1 - light) * 0.026})`;
     const radius = 0.5 + ((index * 23) % 19) / 7;
     context.fillRect(x, y, radius, radius);
   }
@@ -54,13 +54,13 @@ function makeConcreteTexture(
     const x = (index * 97 + seed * 11) % canvas.width;
     const y = (index * 43 + seed * 31) % canvas.height;
     const gradient = context.createRadialGradient(x, y, 1, x, y, 28 + (index % 5) * 9);
-    gradient.addColorStop(0, "rgba(13, 22, 19, 0.18)");
+    gradient.addColorStop(0, "rgba(23, 31, 27, 0.13)");
     gradient.addColorStop(1, "rgba(13, 22, 19, 0)");
     context.fillStyle = gradient;
     context.fillRect(x - 80, y - 80, 160, 160);
   }
 
-  context.strokeStyle = "rgba(12, 15, 14, 0.24)";
+  context.strokeStyle = "rgba(20, 24, 22, 0.19)";
   context.lineWidth = tone === "tile" ? 4 : 1.4;
   if (tone === "tile") {
     for (let position = 0; position <= 512; position += 128) {
@@ -222,13 +222,13 @@ export default function RunnerScene3D({
     mount.prepend(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b100e);
-    scene.fog = new THREE.FogExp2(0x0b100e, 0.031);
+    scene.background = new THREE.Color(0x121816);
+    scene.fog = new THREE.FogExp2(0x151b18, 0.028);
 
     const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 150);
     camera.position.set(0, 4.8, 9.2);
 
-    const ambient = new THREE.HemisphereLight(0xaeb8b2, 0x111713, 0.88);
+    const ambient = new THREE.HemisphereLight(0xc2c9c3, 0x232a26, 1.02);
     scene.add(ambient);
 
     const flashlight = new THREE.SpotLight(
@@ -282,29 +282,29 @@ export default function RunnerScene3D({
     const floorTexture = makeConcreteTexture(renderer, "floor");
     const tileTexture = makeConcreteTexture(renderer, "tile");
     const wallMaterial = new THREE.MeshStandardMaterial({
-      color: 0x727570,
+      color: 0xb7bab4,
       map: concreteTexture,
-      roughness: 0.94,
+      roughness: 0.9,
       metalness: 0.02,
     });
     const floorMaterial = new THREE.MeshStandardMaterial({
-      color: 0x515553,
+      color: 0x8c918d,
       map: floorTexture,
       roughness: 0.88,
       metalness: 0.03,
     });
     const tileMaterial = new THREE.MeshStandardMaterial({
-      color: 0x666d6b,
+      color: 0xaeb4b1,
       map: tileTexture,
       roughness: 0.78,
       metalness: 0.04,
     });
     const ceilingMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2e3230,
+      color: 0x5a605c,
       roughness: 0.98,
     });
     const pipeMaterial = new THREE.MeshStandardMaterial({
-      color: 0x333a38,
+      color: 0x505a56,
       roughness: 0.7,
       metalness: 0.4,
     });
