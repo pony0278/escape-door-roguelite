@@ -2358,6 +2358,313 @@ button:focus-visible {
   }
 }
 
+/* P2.2.1 correction · faithfully follows the supplied connected-map template */
+.notebook-reference-layout {
+  display: block;
+  min-height: auto;
+  background:
+    radial-gradient(circle at 50% 20%, #59544e 0%, #393632 44%, #1b1a18 100%);
+}
+
+.notebook-reference-layout .notebook-reference-panel {
+  min-width: 0;
+  padding: 18px clamp(12px, 2.2vw, 28px) 26px;
+  border: 0;
+}
+
+.notebook-reference-heading {
+  display: flex;
+  width: min(1220px, 100%);
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0 auto 12px;
+  color: #f4ecd8;
+  font-family: "Segoe Print", "Comic Sans MS", "Bradley Hand", cursive;
+}
+
+.notebook-reference-heading p,
+.notebook-reference-heading h2 {
+  margin: 0;
+}
+
+.notebook-reference-heading p {
+  font-size: clamp(22px, 2.4vw, 34px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transform: rotate(-0.7deg);
+}
+
+.notebook-reference-heading h2 {
+  margin-top: 5px;
+  color: rgba(244, 236, 216, 0.7);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.notebook-reference-heading > span {
+  color: rgba(244, 236, 216, 0.82);
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.notebook-paper-wrap {
+  position: relative;
+  width: min(1220px, 100%);
+  aspect-ratio: 11 / 7;
+  min-height: 560px;
+  margin: 0 auto;
+  filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.38));
+  transform: rotate(-0.18deg);
+}
+
+.notebook-map.reference-paper {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 2px solid rgba(56, 45, 32, 0.7);
+  border-radius: 6px 5px 7px 4px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(87, 77, 66, 0.07),
+      rgba(255, 255, 255, 0.03) 18%,
+      rgba(87, 77, 66, 0.05) 100%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(76, 72, 67, 0.11) 0,
+      rgba(76, 72, 67, 0.11) 1px,
+      transparent 1px,
+      transparent 24px
+    ),
+    linear-gradient(rgba(176, 136, 132, 0.15), rgba(176, 136, 132, 0.15)),
+    #e5dccb;
+  box-shadow:
+    inset 0 0 48px rgba(82, 59, 34, 0.15),
+    inset 0 0 4px rgba(0, 0, 0, 0.46);
+  color: #2e2822;
+  transform: none;
+}
+
+.notebook-map.reference-paper::before {
+  z-index: 20;
+  inset: 0;
+  border: 0;
+  opacity: 0.28;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(92, 58, 44, 0.28) 0 0.9px, transparent 1.7px),
+    radial-gradient(circle at 72% 64%, rgba(92, 58, 44, 0.18) 0 0.8px, transparent 1.5px);
+  background-size: 27px 31px, 41px 37px;
+  mix-blend-mode: multiply;
+  transform: none;
+}
+
+.notebook-map.reference-paper::after {
+  z-index: 21;
+  inset: 0;
+  border: 0;
+  background: none;
+  mix-blend-mode: normal;
+  box-shadow:
+    inset 0 0 18px rgba(51, 37, 20, 0.2),
+    inset 0 0 2px rgba(0, 0, 0, 0.55);
+  transform: none;
+}
+
+.notebook-map-canvas,
+.reference-paper .notebook-route-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.notebook-map-canvas {
+  z-index: 1;
+}
+
+.reference-paper .notebook-route-canvas {
+  z-index: 4;
+  filter: none;
+  mix-blend-mode: multiply;
+}
+
+.notebook-map.reference-paper.is-drawing .notebook-route-canvas {
+  filter: none;
+}
+
+.map-hit-node {
+  position: absolute;
+  z-index: 7;
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: crosshair;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.reference-paper.is-drawing .map-hit-node.available {
+  pointer-events: none;
+}
+
+.map-hit-node.current {
+  width: 30px;
+  height: 30px;
+  border: 2px solid rgba(166, 64, 52, 0.42);
+}
+
+.map-hit-node.point-start {
+  width: 116px;
+  height: 88px;
+}
+
+.notebook-note {
+  position: absolute;
+  z-index: 12;
+  bottom: 18px;
+  left: 18px;
+  max-width: min(480px, 62%);
+  padding: 8px 10px;
+  border: 2px solid rgba(56, 49, 40, 0.85);
+  background: rgba(238, 228, 204, 0.9);
+  box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.18);
+  color: #2e2822;
+  font: 700 14px/1.35 "Segoe Print", "Comic Sans MS", "Bradley Hand", cursive;
+  pointer-events: none;
+  transform: rotate(-1deg);
+}
+
+.notebook-controls {
+  display: flex;
+  width: min(1220px, 100%);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 14px auto 0;
+}
+
+.notebook-control {
+  min-height: 0;
+  padding: 10px 16px;
+  border: 2px solid #373026;
+  border-radius: 5px 8px 5px 6px;
+  background: #eee3cb;
+  box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.24);
+  color: #2b251f;
+  font: 700 15px/1.2 "Segoe Print", "Comic Sans MS", cursive;
+  cursor: pointer;
+  transform: rotate(-0.5deg);
+}
+
+.notebook-control:hover:not(:disabled) {
+  filter: none;
+  transform: translateY(-1px) rotate(-0.5deg);
+}
+
+.notebook-control:active:not(:disabled) {
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.24);
+  transform: translate(2px, 3px) rotate(-0.5deg);
+}
+
+.notebook-control.danger {
+  border-color: #7e342a;
+  background: #efd8ce;
+  color: #6e2f27;
+}
+
+.notebook-control.primary {
+  border-color: #245b78;
+  background: #d6e6ef;
+  color: #174457;
+}
+
+.notebook-control:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.notebook-readout {
+  margin-left: auto;
+  color: #f2ead6;
+  font: 700 14px/1.4 "Segoe Print", "Comic Sans MS", cursive;
+}
+
+.notebook-risk-line {
+  display: flex;
+  width: min(1220px, 100%);
+  align-items: baseline;
+  gap: 12px;
+  margin: 13px auto 0;
+  color: rgba(242, 234, 214, 0.7);
+  font-family: "Segoe Print", "Comic Sans MS", cursive;
+}
+
+.notebook-risk-line b {
+  color: #e0b28a;
+  font-size: 13px;
+}
+
+.notebook-risk-line.safe b {
+  color: #c9d8b0;
+}
+
+.notebook-risk-line span {
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .notebook-reference-layout .notebook-reference-panel {
+    padding: 12px 10px 20px;
+  }
+
+  .notebook-reference-heading > span {
+    display: none;
+  }
+
+  .notebook-reference-heading p {
+    font-size: 22px;
+  }
+
+  .notebook-paper-wrap {
+    aspect-ratio: auto;
+    height: 74vh;
+    min-height: 520px;
+  }
+
+  .notebook-note {
+    max-width: 76%;
+    font-size: 12px;
+  }
+
+  .notebook-control {
+    flex: 1 1 auto;
+  }
+
+  .notebook-readout {
+    width: 100%;
+    margin-left: 0;
+    font-size: 12px;
+  }
+
+  .notebook-risk-line {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+}
+
 
 .clue-target b {
   position: relative;
