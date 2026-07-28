@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import RunnerScene3D from "./RunnerScene3D";
 
 type GamePhase =
   | "planning"
@@ -608,7 +609,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P1.1</p>
+            <p>PHASE P2.0</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -736,7 +737,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>2.5D 第三人稱追逐測試</span>
+        <span>3D 第三人稱追逐測試</span>
         <p>
           {phase === "planning"
             ? "拖曳或依序點擊節點畫線 · Backspace 返回 · Esc 清除"
@@ -1072,36 +1073,17 @@ function RunningScreen({
       </div>
 
       <div
-        className={`chase-stage ${turnClass} chase-${chaseState}`}
+        className={`chase-stage runner-3d-stage ${turnClass} chase-${chaseState}`}
         style={stageStyle}
         aria-label={`第三人稱追逐演出，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
       >
-        <div className="chase-world" aria-hidden="true">
-          <div className="vanishing-glow" />
-          <div className="tunnel-ribs">
-            {Array.from({ length: 9 }, (_, index) => (
-              <i
-                className="tunnel-rib"
-                key={index}
-                style={{ "--rib-index": index } as CSSProperties}
-              />
-            ))}
-          </div>
-          <div className="ceiling-track">
-            <span /><span /><span /><span />
-          </div>
-          <div className="chase-wall chase-wall-left">
-            <span>配電</span><span>B1</span><span>維修</span><span>禁入</span>
-          </div>
-          <div className="chase-wall chase-wall-right">
-            <span>出口</span><span>04</span><span>機房</span><span>警告</span>
-          </div>
-          <div className="chase-floor">
-            <span className="floor-center-line" />
-          </div>
-          <div className="speed-streaks speed-streaks-left" />
-          <div className="speed-streaks speed-streaks-right" />
-        </div>
+        <RunnerScene3D
+          progress={progress}
+          turn={turnValue}
+          monsterPressure={monsterPressure}
+          monsterDistance={monsterDistance}
+          clueActive={Boolean(activeClue)}
+        />
 
         <div className="chase-cinematic-label" aria-hidden="true">
           <span>{chaseState === "lookback" ? "回頭確認" : "路線執行中"}</span>
@@ -1112,46 +1094,6 @@ function RunningScreen({
                 ? "不要回頭"
                 : turnLabel}
           </b>
-        </div>
-
-        <div className="monster-lookback" aria-hidden="true">
-          <span className="monster-horns" />
-          <span className="monster-head">
-            <i className="monster-eye monster-eye-left" />
-            <i className="monster-eye monster-eye-right" />
-            <i className="monster-mouth" />
-          </span>
-          <span className="monster-shoulders" />
-          <span className="monster-arm monster-arm-left" />
-          <span className="monster-arm monster-arm-right" />
-        </div>
-
-        <div className="monster-ground-shadow" aria-hidden="true" />
-        <div className="monster-claw monster-claw-left" aria-hidden="true">
-          <i /><i /><i />
-        </div>
-        <div className="monster-claw monster-claw-right" aria-hidden="true">
-          <i /><i /><i />
-        </div>
-
-        <div className="chase-runner" aria-label="正在依照手繪路線奔跑的玩家">
-          <span className="chase-runner-head">
-            <i />
-          </span>
-          <span className="chase-runner-neck" />
-          <span className="chase-runner-torso" />
-          <span className="chase-backpack">
-            <i>逃</i>
-            <b>◆</b>
-          </span>
-          <span className="chase-runner-arm chase-runner-arm-left" />
-          <span className="chase-runner-arm chase-runner-arm-right" />
-          <span className="chase-runner-leg chase-runner-leg-left">
-            <i />
-          </span>
-          <span className="chase-runner-leg chase-runner-leg-right">
-            <i />
-          </span>
         </div>
 
         {activeClue && (
