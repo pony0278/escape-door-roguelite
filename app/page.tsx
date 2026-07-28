@@ -2,6 +2,7 @@
 
 import {
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -93,18 +94,18 @@ const CLUES: Record<ClueId, Clue> = {
 };
 
 const MAP_NODES: MapNode[] = [
-  { id: "start", x: 70, y: 195, label: "玩家起點", shortLabel: "你", type: "start" },
-  { id: "northEntry", x: 205, y: 84, label: "北側岔路", shortLabel: "A", type: "normal" },
-  { id: "middleEntry", x: 205, y: 195, label: "中央走廊", shortLabel: "B", type: "normal" },
-  { id: "southEntry", x: 205, y: 306, label: "南側岔路", shortLabel: "C", type: "normal" },
-  { id: "turnClue", x: 340, y: 74, label: "可疑機械室", shortLabel: "?", type: "clue", clueId: "turn" },
-  { id: "middleHub", x: 340, y: 195, label: "中央機房", shortLabel: "D", type: "normal" },
-  { id: "southStore", x: 340, y: 316, label: "廢棄倉庫", shortLabel: "E", type: "normal" },
-  { id: "key", x: 475, y: 195, label: "銅鑰匙", shortLabel: "◆", type: "key" },
-  { id: "northExit", x: 610, y: 80, label: "北側長廊", shortLabel: "F", type: "normal" },
-  { id: "middleExit", x: 610, y: 195, label: "直通走廊", shortLabel: "G", type: "normal" },
-  { id: "knockClue", x: 610, y: 310, label: "可疑維修區", shortLabel: "?", type: "clue", clueId: "knock" },
-  { id: "exit", x: 770, y: 195, label: "逃生門", shortLabel: "門", type: "exit" },
+  { id: "start", x: 420, y: 352, label: "玩家起點", shortLabel: "你", type: "start" },
+  { id: "northEntry", x: 205, y: 292, label: "西側岔路", shortLabel: "A", type: "normal" },
+  { id: "middleEntry", x: 420, y: 274, label: "中央走廊", shortLabel: "B", type: "normal" },
+  { id: "southEntry", x: 632, y: 300, label: "東側岔路", shortLabel: "C", type: "normal" },
+  { id: "turnClue", x: 128, y: 168, label: "可疑機械室", shortLabel: "?", type: "clue", clueId: "turn" },
+  { id: "middleHub", x: 410, y: 194, label: "中央機房", shortLabel: "D", type: "normal" },
+  { id: "southStore", x: 700, y: 205, label: "廢棄倉庫", shortLabel: "E", type: "normal" },
+  { id: "key", x: 325, y: 102, label: "銅鑰匙", shortLabel: "◆", type: "key" },
+  { id: "northExit", x: 485, y: 68, label: "北側長廊", shortLabel: "F", type: "normal" },
+  { id: "middleExit", x: 612, y: 105, label: "直通走廊", shortLabel: "G", type: "normal" },
+  { id: "knockClue", x: 700, y: 146, label: "可疑維修區", shortLabel: "?", type: "clue", clueId: "knock" },
+  { id: "exit", x: 782, y: 68, label: "逃生門", shortLabel: "門", type: "exit" },
 ];
 
 const MAP_EDGES: Array<readonly [MapNodeId, MapNodeId]> = [
@@ -116,6 +117,9 @@ const MAP_EDGES: Array<readonly [MapNodeId, MapNodeId]> = [
   ["middleEntry", "middleHub"],
   ["southEntry", "middleHub"],
   ["southEntry", "southStore"],
+  ["turnClue", "northExit"],
+  ["middleHub", "middleExit"],
+  ["southStore", "knockClue"],
   ["turnClue", "key"],
   ["middleHub", "key"],
   ["southStore", "key"],
@@ -150,7 +154,7 @@ function buildRouteConfig(nodeIds: MapNodeId[]): RouteConfig {
   const rawDistance = calculateRouteDistance(nodeIds);
   const distanceMeters = Math.max(0, Math.round(rawDistance / 7.4));
   const durationMs = Math.round(
-    Math.min(14500, Math.max(7600, 4300 + rawDistance * 9.2)),
+    Math.min(14500, Math.max(4800, 4300 + rawDistance * 9.2)),
   );
   const events = nodeIds.flatMap<RouteEvent>((id, index) => {
     const clueId = MAP_NODE_LOOKUP[id].clueId;
@@ -161,19 +165,25 @@ function buildRouteConfig(nodeIds: MapNodeId[]): RouteConfig {
     }];
   });
   const clueIds = new Set(events.map((event) => event.clueId));
+  const hasKey = nodeIds.includes("key");
+  const reachedExit = nodeIds.at(-1) === "exit";
   const name =
-    clueIds.size === 2
-      ? "雙提示迂迴線"
-      : clueIds.has("turn")
-        ? "北側觀察線"
-        : clueIds.has("knock")
-          ? "南側觀察線"
-          : "直衝逃生線";
+    !reachedExit
+      ? "臨時中斷線"
+      : !hasKey
+        ? "無鑰匙直衝線"
+        : clueIds.size === 2
+          ? "雙提示迂迴線"
+          : clueIds.has("turn")
+            ? "北側觀察線"
+            : clueIds.has("knock")
+              ? "南側觀察線"
+              : "直衝逃生線";
 
   return {
     id: "custom",
     name,
-    label: "玩家手繪路線",
+    label: "玩家一筆畫路線",
     durationMs,
     doorTimeSeconds: Math.max(
       8.2,
@@ -262,7 +272,7 @@ function phaseInstruction(
 ) {
   switch (phase) {
     case "planning":
-      return "從起點親手畫出逃生路線；必須經過鑰匙，最後抵達逃生門。";
+      return "從 START 按住並一筆畫出路線；何時停筆、是否前往逃生門，都由你決定。";
     case "running":
       return activeClue
         ? "發現可疑物件！立即聚焦，記住門鎖提示。"
@@ -323,7 +333,7 @@ export default function Home() {
 
   const routeHasKey = plannedNodeIds.includes("key");
   const routeReachedExit = plannedNodeIds.at(-1) === "exit";
-  const routeIsValid = routeHasKey && routeReachedExit;
+  const routeIsReady = plannedNodeIds.length > 1;
 
   const currentRoute = useMemo(
     () => routeLocked ?? plannedRoute ?? EMPTY_ROUTE,
@@ -389,12 +399,8 @@ export default function Home() {
   }, []);
 
   const startRun = useCallback(() => {
-    if (!routeIsValid) {
-      setRouteError(
-        !routeHasKey
-          ? "路線還沒有經過鑰匙。"
-          : "請把路線畫到逃生門。",
-      );
+    if (!routeIsReady) {
+      setRouteError("請從 START 按住，至少連上一個相鄰節點。");
       playTone(95, 0.15, 0.05);
       return;
     }
@@ -410,7 +416,14 @@ export default function Home() {
     setRunPaused(false);
     setPhase("running");
     playTone(180, 0.14, 0.045);
-  }, [plannedRoute, playTone, routeHasKey, routeIsValid]);
+  }, [plannedRoute, playTone, routeIsReady]);
+
+  const beginRouteStroke = useCallback(() => {
+    if (phase !== "planning") return;
+    setPlannedNodeIds(["start"]);
+    setRouteError("");
+    playTone(245, 0.06, 0.024);
+  }, [phase, playTone]);
 
   const appendRouteNode = useCallback(
     (nodeId: MapNodeId) => {
@@ -425,10 +438,6 @@ export default function Home() {
           playTone(210, 0.05, 0.02);
           return current.slice(0, -1);
         }
-        if (lastNodeId === "exit") {
-          setRouteError("路線已經抵達逃生門；請先返回上一步再修改。");
-          return current;
-        }
         if (!areConnected(lastNodeId, nodeId)) {
           setRouteError("只能連接目前位置旁邊的道路節點。");
           playTone(95, 0.1, 0.04);
@@ -439,25 +448,13 @@ export default function Home() {
           playTone(95, 0.1, 0.04);
           return current;
         }
-        setRouteError(
-          nodeId === "exit" && !current.includes("key")
-            ? "你抵達了門，但還沒取得鑰匙。"
-            : "",
-        );
+        setRouteError("");
         playTone(nodeId === "key" ? 620 : 280, 0.07, 0.03);
         return [...current, nodeId];
       });
     },
     [phase, playTone],
   );
-
-  const undoRouteNode = useCallback(() => {
-    setPlannedNodeIds((current) =>
-      current.length > 1 ? current.slice(0, -1) : current,
-    );
-    setRouteError("");
-    playTone(210, 0.05, 0.02);
-  }, [playTone]);
 
   const clearRoute = useCallback(() => {
     setPlannedNodeIds(["start"]);
@@ -539,13 +536,31 @@ export default function Home() {
         setRunProgress(1);
         setActiveClue(null);
         setFocusedClue(null);
-        setTimeLeft(route.doorTimeSeconds);
-        setLastStruggle(false);
-        setLockStep("rotation");
-        setTurns(0);
-        setKnocks(0);
-        setPhase("door");
-        playTone(240, 0.18, 0.05);
+        const finalNodeId = route.nodeIds.at(-1) ?? "start";
+        const reachedExit = finalNodeId === "exit";
+        const collectedKey = route.nodeIds.includes("key");
+
+        if (!reachedExit) {
+          setFailureReason(
+            `你畫的路線在「${MAP_NODE_LOOKUP[finalNodeId].label}」停下；怪物沿著筆跡追了上來。`,
+          );
+          setTimeLeft(0);
+          setPhase("fail");
+          playTone(92, 0.28, 0.065);
+        } else if (!collectedKey) {
+          setFailureReason("你成功跑到逃生門，卻沒有在路線上取得鑰匙。");
+          setTimeLeft(0);
+          setPhase("fail");
+          playTone(86, 0.3, 0.07);
+        } else {
+          setTimeLeft(route.doorTimeSeconds);
+          setLastStruggle(false);
+          setLockStep("rotation");
+          setTurns(0);
+          setKnocks(0);
+          setPhase("door");
+          playTone(240, 0.18, 0.05);
+        }
         window.clearInterval(progressTimer);
       }
     }, 40);
@@ -601,11 +616,7 @@ export default function Home() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (phase === "planning") {
-        if (event.key === "Enter" && routeIsValid) startRun();
-        if (event.key === "Backspace" && plannedNodeIds.length > 1) {
-          event.preventDefault();
-          undoRouteNode();
-        }
+        if (event.key === "Enter" && routeIsReady) startRun();
         if (event.key === "Escape") clearRoute();
       }
       if (phase === "running" && event.code === "Space") {
@@ -628,10 +639,9 @@ export default function Home() {
     phase,
     plannedNodeIds.length,
     resetRun,
-    routeIsValid,
+    routeIsReady,
     startRun,
     toggleRunPause,
-    undoRouteNode,
   ]);
 
   const applyMistake = useCallback(
@@ -708,7 +718,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P2.1</p>
+            <p>PHASE P2.2</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -778,9 +788,9 @@ export default function Home() {
             routeError={routeError}
             hasKey={routeHasKey}
             reachedExit={routeReachedExit}
-            isValid={routeIsValid}
+            isReady={routeIsReady}
+            onBeginStroke={beginRouteStroke}
             onAppendNode={appendRouteNode}
-            onUndo={undoRouteNode}
             onClear={clearRoute}
             onStart={startRun}
           />
@@ -843,10 +853,10 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>地下水泥通道與牆面提示</span>
+        <span>筆記本一筆畫逃亡路線</span>
         <p>
           {phase === "planning"
-            ? "拖曳或依序點擊節點畫線 · Backspace 返回 · Esc 清除"
+            ? "從 START 按住一筆畫 · 放開完成 · Esc 清除"
             : phase === "running"
               ? "快捷鍵：P 暫停／繼續 · Space 聚焦提示"
               : phase === "success" || phase === "fail"
@@ -864,9 +874,9 @@ function PlanningScreen({
   routeError,
   hasKey,
   reachedExit,
-  isValid,
+  isReady,
+  onBeginStroke,
   onAppendNode,
-  onUndo,
   onClear,
   onStart,
 }: {
@@ -875,20 +885,97 @@ function PlanningScreen({
   routeError: string;
   hasKey: boolean;
   reachedExit: boolean;
-  isValid: boolean;
+  isReady: boolean;
+  onBeginStroke: () => void;
   onAppendNode: (nodeId: MapNodeId) => void;
-  onUndo: () => void;
   onClear: () => void;
   onStart: () => void;
 }) {
   const [isDrawing, setIsDrawing] = useState(false);
+  const [cursorPoint, setCursorPoint] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [strokeMessage, setStrokeMessage] = useState(
+    "筆尖必須從藍色 START 開始",
+  );
+  const stageRef = useRef<HTMLDivElement>(null);
+  const activePointerRef = useRef<number | null>(null);
   const lastNodeId = plannedNodeIds.at(-1) ?? "start";
+  const lastNode = MAP_NODE_LOOKUP[lastNodeId];
   const routePoints = plannedNodeIds
     .map((id) => `${MAP_NODE_LOOKUP[id].x},${MAP_NODE_LOOKUP[id].y}`)
     .join(" ");
+  const safeRoute = hasKey && reachedExit;
+  const finalLocation = MAP_NODE_LOOKUP[lastNodeId].label;
 
-  const handleNode = (nodeId: MapNodeId) => {
-    onAppendNode(nodeId);
+  const pointFromPointer = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    const bounds = stage.getBoundingClientRect();
+    return {
+      x: ((event.clientX - bounds.left) / bounds.width) * 840,
+      y: ((event.clientY - bounds.top) / bounds.height) * 390,
+    };
+  };
+
+  const nearestConnectedNode = (point: { x: number; y: number }) => {
+    const candidates = MAP_NODES.filter(
+      (node) => node.id !== lastNodeId && areConnected(lastNodeId, node.id),
+    )
+      .map((node) => ({
+        node,
+        distance: Math.hypot(node.x - point.x, node.y - point.y),
+      }))
+      .sort((a, b) => a.distance - b.distance);
+    return candidates[0]?.distance <= 42 ? candidates[0].node : null;
+  };
+
+  const beginStroke = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const point = pointFromPointer(event);
+    if (!point) return;
+    const start = MAP_NODE_LOOKUP.start;
+    const startsOnMarker =
+      Math.hypot(point.x - start.x, point.y - start.y) <= 52;
+
+    if (!startsOnMarker) {
+      setStrokeMessage("請把筆尖移到 START，再按住開始");
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    activePointerRef.current = event.pointerId;
+    onBeginStroke();
+    setIsDrawing(true);
+    setCursorPoint(point);
+    setStrokeMessage("不要放開，拖過相鄰的紅色節點");
+  };
+
+  const moveStroke = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isDrawing || activePointerRef.current !== event.pointerId) return;
+    const point = pointFromPointer(event);
+    if (!point) return;
+    event.preventDefault();
+    setCursorPoint(point);
+    const snappedNode = nearestConnectedNode(point);
+    if (snappedNode) {
+      onAppendNode(snappedNode.id);
+      setStrokeMessage(`已連到「${snappedNode.label}」`);
+    }
+  };
+
+  const finishStroke = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (activePointerRef.current !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    activePointerRef.current = null;
+    setIsDrawing(false);
+    setCursorPoint(null);
+    setStrokeMessage("已停筆；可以直接開始逃亡，或從 START 重新畫");
   };
 
   return (
@@ -896,49 +983,89 @@ function PlanningScreen({
       <section className="map-panel">
         <div className="panel-heading">
           <div>
-            <p className="kicker">空白逃生地圖 · B1 地下層</p>
-            <h2>親手畫出逃生路線</h2>
+            <p className="kicker">倖存者筆記 · B1 地下層</p>
+            <h2>按住 START，一筆畫出逃亡路線</h2>
           </div>
           <div className="map-legend">
-            <span><i className="legend-start" /> 起點</span>
+            <span><i className="legend-start" /> START</span>
             <span><i className="legend-key" /> 鑰匙</span>
-            <span><i className="legend-exit" /> 逃生門</span>
-            <span><i className="legend-clue" /> 可疑區域</span>
+            <span><i className="legend-exit" /> 門</span>
+            <span><i className="legend-clue" /> 牆面提示</span>
           </div>
         </div>
 
         <div
-          className={`map-stage drawing-map ${isDrawing ? "is-drawing" : ""}`}
-          onPointerUp={() => setIsDrawing(false)}
-          onPointerLeave={() => setIsDrawing(false)}
+          ref={stageRef}
+          className={`map-stage drawing-map notebook-map ${
+            isDrawing ? "is-drawing" : ""
+          }`}
+          onPointerDown={beginStroke}
+          onPointerMove={moveStroke}
+          onPointerUp={finishStroke}
+          onPointerCancel={finishStroke}
+          role="application"
+          aria-label="方格筆記本逃亡地圖。從 START 按住並拖過相鄰節點，放開完成一筆路線。"
+          tabIndex={0}
         >
           <div className="map-grid" aria-hidden="true" />
+          <div className="notebook-scribbles" aria-hidden="true">
+            <span>別停下</span>
+            <span>有聲音？</span>
+            <span>門在這邊 →</span>
+          </div>
           <svg
             className="route-map"
             viewBox="0 0 840 390"
             preserveAspectRatio="none"
             role="img"
-            aria-label="尚未規劃的地下層道路網，玩家需自行畫線經過鑰匙並抵達逃生門"
+            aria-label="潦草畫在方格紙上的地下層道路網"
           >
-            {MAP_EDGES.map(([fromId, toId]) => {
-              const from = MAP_NODE_LOOKUP[fromId];
-              const to = MAP_NODE_LOOKUP[toId];
-              return (
-                <line
-                  key={`${fromId}-${toId}`}
-                  className="map-corridor"
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
+            <defs>
+              <filter id="pencil-wobble" x="-10%" y="-10%" width="120%" height="120%">
+                <feTurbulence
+                  type="fractalNoise"
+                  baseFrequency="0.018"
+                  numOctaves="2"
+                  seed="7"
+                  result="noise"
                 />
-              );
-            })}
+                <feDisplacementMap
+                  in="SourceGraphic"
+                  in2="noise"
+                  scale="3.2"
+                />
+              </filter>
+            </defs>
+            <g filter="url(#pencil-wobble)">
+              {MAP_EDGES.map(([fromId, toId]) => {
+                const from = MAP_NODE_LOOKUP[fromId];
+                const to = MAP_NODE_LOOKUP[toId];
+                return (
+                  <line
+                    key={`${fromId}-${toId}`}
+                    className="map-corridor"
+                    x1={from.x}
+                    y1={from.y}
+                    x2={to.x}
+                    y2={to.y}
+                  />
+                );
+              })}
+            </g>
             {plannedNodeIds.length > 1 && (
               <>
                 <polyline className="drawn-route-shadow" points={routePoints} />
                 <polyline className="drawn-route" points={routePoints} />
               </>
+            )}
+            {isDrawing && cursorPoint && (
+              <line
+                className="drawn-route-live"
+                x1={lastNode.x}
+                y1={lastNode.y}
+                x2={cursorPoint.x}
+                y2={cursorPoint.y}
+              />
             )}
           </svg>
 
@@ -949,8 +1076,7 @@ function PlanningScreen({
             const canConnect =
               node.id !== lastNodeId && areConnected(lastNodeId, node.id);
             return (
-              <button
-                type="button"
+              <div
                 key={node.id}
                 className={`map-point point-${node.type} ${
                   isSelected ? "selected" : ""
@@ -961,72 +1087,63 @@ function PlanningScreen({
                   left: `${(node.x / 840) * 100}%`,
                   top: `${(node.y / 390) * 100}%`,
                 }}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  setIsDrawing(true);
-                  handleNode(node.id);
-                }}
-                onPointerEnter={() => {
-                  if (isDrawing) handleNode(node.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    handleNode(node.id);
-                  }
-                }}
                 aria-label={`${node.label}${
                   isSelected ? `，路線第 ${selectedIndex + 1} 站` : ""
                 }`}
+                role="img"
               >
-                <span>{node.shortLabel}</span>
+                <span>{node.id === "start" ? "START" : node.shortLabel}</span>
                 <small>{node.label}</small>
-              </button>
+              </div>
             );
           })}
 
           {plannedNodeIds.length === 1 && (
             <div className="draw-hint">
-              <span>01</span>
-              <b>從「你」開始畫線</b>
-              <small>按住滑過相鄰節點，或依序點擊節點</small>
+              <span>✎</span>
+              <b>按住藍色 START</b>
+              <small>不要放開，拖過相鄰的紅點</small>
             </div>
           )}
 
           <div className="map-callout key-callout">
-            <span>必經</span>
+            <span>可選</span>
             銅鑰匙
           </div>
           <div className="map-callout killer-callout">
             <span>威脅</span>
             殺手從西側逼近
           </div>
+          <div className={`stroke-status ${isDrawing ? "active" : ""}`}>
+            <span>{isDrawing ? "●" : "○"}</span>
+            {routeError || strokeMessage}
+          </div>
         </div>
       </section>
 
       <aside className="route-panel">
         <div className="route-heading">
-          <p className="kicker">你的路線草稿</p>
-          <span>{plannedNodeIds.length} 個節點</span>
+          <p className="kicker">筆記本上的逃亡計畫</p>
+          <span>{Math.max(0, plannedNodeIds.length - 1)} 段筆跡</span>
         </div>
 
         <div className="drawing-instructions">
-          <div className="instruction-step done">
-            <span>1</span>
-            <p><b>從起點出發</b><small>起點已經自動固定</small></p>
+          <div className={`instruction-step ${isReady ? "done" : "active"}`}>
+            <span>{isReady ? "✓" : "1"}</span>
+            <p><b>一筆畫出路線</b><small>必須從 START 按住開始</small></p>
           </div>
-          <div className={`instruction-step ${hasKey ? "done" : "active"}`}>
-            <span>{hasKey ? "✓" : "2"}</span>
-            <p><b>經過銅鑰匙</b><small>沒拿到鑰匙就無法開門</small></p>
+          <div className={`instruction-step optional ${hasKey ? "done" : ""}`}>
+            <span>{hasKey ? "✓" : "?"}</span>
+            <p><b>是否取得鑰匙</b><small>可以略過，但門會打不開</small></p>
           </div>
-          <div className={`instruction-step ${reachedExit ? "done" : hasKey ? "active" : ""}`}>
-            <span>{reachedExit ? "✓" : "3"}</span>
-            <p><b>抵達逃生門</b><small>畫到門口才算完成計畫</small></p>
+          <div className={`instruction-step optional ${reachedExit ? "done" : ""}`}>
+            <span>{reachedExit ? "✓" : "?"}</span>
+            <p><b>是否抵達逃生門</b><small>何時停筆完全由你決定</small></p>
           </div>
         </div>
 
         <div className="route-sequence" aria-label="目前畫出的路線">
-          <span>路線紀錄</span>
+          <span>筆跡經過順序</span>
           <div>
             {plannedNodeIds.map((id, index) => (
               <span className="sequence-node" key={`${id}-${index}`}>
@@ -1037,20 +1154,13 @@ function PlanningScreen({
           </div>
         </div>
 
-        <div className="route-edit-actions">
-          <button
-            type="button"
-            onClick={onUndo}
-            disabled={plannedNodeIds.length <= 1}
-          >
-            ↶ 返回一步
-          </button>
+        <div className="route-edit-actions single">
           <button
             type="button"
             onClick={onClear}
             disabled={plannedNodeIds.length <= 1}
           >
-            × 清除路線
+            ↶ 清除，從 START 重新畫
           </button>
         </div>
 
@@ -1069,15 +1179,31 @@ function PlanningScreen({
           </div>
         </div>
 
-        <div className={`route-validation ${isValid ? "valid" : ""}`}>
-          <span>{isValid ? "✓" : "!"}</span>
+        <div
+          className={`route-validation ${safeRoute ? "valid" : ""} ${
+            isReady && !safeRoute ? "risk" : ""
+          }`}
+        >
+          <span>{safeRoute ? "✓" : isReady ? "!" : "✎"}</span>
           <p>
-            <b>{isValid ? "路線可以執行" : "路線尚未完成"}</b>
+            <b>
+              {!isReady
+                ? "還沒有設定路線"
+                : safeRoute
+                  ? "這條線有機會逃出去"
+                  : "可以出發，但計畫有風險"}
+            </b>
             <small>
               {routeError ||
-                (isValid
-                  ? "角色會完全按照你畫出的順序奔跑。"
-                  : "必須取得鑰匙並以逃生門作為終點。")}
+                (!isReady
+                  ? "從 START 按住，至少拖到一個相鄰節點。"
+                  : reachedExit && !hasKey
+                    ? "路線抵達門口，但沒有經過鑰匙。"
+                    : !reachedExit && hasKey
+                      ? `拿到了鑰匙，但筆跡停在「${finalLocation}」。`
+                      : !reachedExit
+                        ? `筆跡停在「${finalLocation}」，沒有抵達逃生門。`
+                        : "角色會完全按照你畫出的順序奔跑。")}
             </small>
           </p>
         </div>
@@ -1086,10 +1212,10 @@ function PlanningScreen({
           type="button"
           className="primary-button"
           onClick={onStart}
-          disabled={!isValid}
+          disabled={!isReady}
         >
-          <span>沿著這條線開始奔跑</span>
-          <i>{isValid ? "Enter ↵" : "未完成"}</i>
+          <span>按照這條線開始逃亡</span>
+          <i>{isReady ? "隨時開始 · Enter ↵" : "先畫一段"}</i>
         </button>
       </aside>
     </div>
