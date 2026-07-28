@@ -35,6 +35,7 @@ interface RunnerScene3DProps {
   clueKind: ClueKind;
   clueText: string;
   tuning: SceneTuning;
+  paused: boolean;
 }
 
 const CHUNK_LENGTH = 18;
@@ -183,6 +184,7 @@ export default function RunnerScene3D({
   clueKind,
   clueText,
   tuning,
+  paused,
 }: RunnerScene3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneStateRef = useRef({
@@ -194,6 +196,7 @@ export default function RunnerScene3D({
     clueKind,
     clueText,
     tuning,
+    paused,
   });
 
   useEffect(() => {
@@ -206,6 +209,7 @@ export default function RunnerScene3D({
       clueKind,
       clueText,
       tuning,
+      paused,
     };
   }, [
     clueActive,
@@ -213,6 +217,7 @@ export default function RunnerScene3D({
     clueText,
     monsterDistance,
     monsterPressure,
+    paused,
     progress,
     tuning,
     turn,
@@ -791,9 +796,7 @@ export default function RunnerScene3D({
     function animate() {
       if (disposed) return;
       const dt = Math.min(clock.getDelta(), 0.033);
-      elapsed += dt;
       const current = sceneStateRef.current;
-      const swing = Math.sin(elapsed * 11.5) * 0.74;
 
       renderer.toneMappingExposure = current.tuning.exposure;
       ambient.intensity = current.tuning.ambient;
@@ -812,6 +815,27 @@ export default function RunnerScene3D({
       ceilingMaterial.color
         .copy(ceilingBaseColor)
         .multiplyScalar(current.tuning.concrete);
+      ceilingLights.forEach((light, index) => {
+        if (index % 3 === 1) {
+          light.intensity =
+            Math.sin(elapsed * 13 + index * 2.3) > 0.74
+              ? current.tuning.ceiling * 0.44
+              : current.tuning.ceiling * 0.11;
+        } else {
+          light.intensity = current.tuning.ceiling;
+        }
+      });
+      flashlight.intensity =
+        current.tuning.flashlight + Math.sin(elapsed * 1.7) * 0.4 -
+        current.monsterPressure * 0.75;
+
+      if (current.paused) {
+        renderer.render(scene, camera);
+        return;
+      }
+
+      elapsed += dt;
+      const swing = Math.sin(elapsed * 11.5) * 0.74;
 
       leftLegPivot.rotation.x = swing;
       rightLegPivot.rotation.x = -swing;
@@ -853,17 +877,6 @@ export default function RunnerScene3D({
         3.6,
         dt,
       );
-
-      ceilingLights.forEach((light, index) => {
-        if (index % 3 === 1) {
-          light.intensity =
-            Math.sin(elapsed * 13 + index * 2.3) > 0.74
-              ? current.tuning.ceiling * 0.44
-              : current.tuning.ceiling * 0.11;
-        } else {
-          light.intensity = current.tuning.ceiling;
-        }
-      });
 
       const targetMonsterX = -1.55 + current.turn * 0.42;
       const targetMonsterZ = 3.35 - current.monsterPressure * 1.78;
@@ -936,9 +949,6 @@ export default function RunnerScene3D({
       flashlight.target.position.x = player.position.x * 0.45;
       flashlight.target.position.y = 2.05;
       flashlight.target.position.z = -13.5;
-      flashlight.intensity =
-        current.tuning.flashlight + Math.sin(elapsed * 1.7) * 0.4 -
-        current.monsterPressure * 0.75;
 
       renderer.render(scene, camera);
     }
