@@ -4086,3 +4086,384 @@ button:focus-visible {
     max-width: 240px;
   }
 }
+
+/* P2.2 · notebook one-stroke route planning */
+.notebook-map {
+  min-height: 505px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 2px 6px 3px 5px;
+  background: #d8d0b4;
+  box-shadow:
+    0 1px 0 #f4eed6 inset,
+    0 0 0 1px rgba(53, 47, 38, 0.36),
+    8px 12px 26px rgba(0, 0, 0, 0.34);
+  color: #35332e;
+  cursor: crosshair;
+  transform: rotate(-0.12deg);
+}
+
+.notebook-map::before,
+.notebook-map::after {
+  position: absolute;
+  z-index: 1;
+  inset: 8px;
+  content: "";
+  border: 2px solid rgba(61, 56, 47, 0.55);
+  pointer-events: none;
+  transform: rotate(0.18deg);
+}
+
+.notebook-map::after {
+  inset: 0;
+  border: 0;
+  background:
+    radial-gradient(circle at 14% 24%, rgba(102, 78, 39, 0.09), transparent 19%),
+    radial-gradient(circle at 72% 79%, rgba(83, 65, 37, 0.08), transparent 22%),
+    linear-gradient(105deg, transparent 48%, rgba(76, 66, 47, 0.04) 50%, transparent 52%);
+  mix-blend-mode: multiply;
+}
+
+.notebook-map:focus-visible {
+  outline: 3px solid rgba(77, 121, 153, 0.72);
+  outline-offset: 4px;
+}
+
+.notebook-map .map-grid {
+  z-index: 0;
+  opacity: 0.92;
+  background-image:
+    linear-gradient(rgba(80, 113, 130, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(80, 113, 130, 0.18) 1px, transparent 1px);
+  background-size: 23px 23px;
+}
+
+.notebook-map .map-grid::after {
+  background:
+    linear-gradient(90deg, transparent 49.8%, rgba(70, 98, 114, 0.11) 50%, transparent 50.2%),
+    linear-gradient(transparent 49.8%, rgba(70, 98, 114, 0.11) 50%, transparent 50.2%);
+}
+
+.notebook-map .route-map {
+  z-index: 2;
+}
+
+.notebook-map .map-corridor {
+  opacity: 0.58;
+  stroke: #45423b;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+}
+
+.notebook-map .map-corridor:nth-child(3n + 1) {
+  opacity: 0.4;
+  stroke-width: 6.5;
+}
+
+.notebook-map .drawn-route-shadow {
+  opacity: 0.3;
+  stroke: #4c352f;
+  stroke-width: 10;
+}
+
+.notebook-map .drawn-route {
+  stroke: #a9362d;
+  stroke-width: 5.5;
+  stroke-dasharray: none;
+  filter: drop-shadow(1px 1px 0 rgba(82, 31, 27, 0.34));
+  animation: none;
+}
+
+.notebook-map .drawn-route-live {
+  opacity: 0.68;
+  stroke: #a9362d;
+  stroke-width: 3.5;
+  stroke-dasharray: 8 7;
+  stroke-linecap: round;
+}
+
+.notebook-map .map-point {
+  z-index: 5;
+  width: 19px;
+  height: 19px;
+  border: 2px solid rgba(86, 31, 25, 0.62);
+  border-radius: 50%;
+  background: #b74739;
+  box-shadow: 1px 2px 0 rgba(75, 49, 38, 0.26);
+  color: #f2e5c7;
+  cursor: crosshair;
+  transition:
+    width 100ms,
+    height 100ms,
+    transform 100ms,
+    box-shadow 100ms;
+}
+
+.notebook-map .map-point > span {
+  font: 900 7px/1 var(--font-mono);
+}
+
+.notebook-map .map-point small {
+  top: calc(100% + 5px);
+  color: #48443b;
+  font: 700 10px/1.15 "Comic Sans MS", "Segoe Print", cursive;
+  text-shadow: 0 1px rgba(255, 255, 255, 0.24);
+  transform: translateX(-50%) rotate(-2deg);
+}
+
+.notebook-map .map-point:nth-of-type(2n) small {
+  transform: translateX(-50%) rotate(2deg);
+}
+
+.notebook-map .map-point.available {
+  border-color: #9b2e27;
+  color: #fff5d6;
+  box-shadow:
+    0 0 0 7px rgba(213, 221, 57, 0.32),
+    1px 2px 0 rgba(75, 49, 38, 0.26);
+  animation: notebook-node-pulse 0.7s ease-in-out infinite alternate;
+}
+
+.notebook-map .map-point.selected {
+  border-color: #6f211b;
+  background: #9f3028;
+  color: #fff6da;
+  box-shadow:
+    0 0 0 5px rgba(241, 224, 62, 0.46),
+    1px 2px 0 rgba(75, 49, 38, 0.3);
+}
+
+.notebook-map .map-point.current {
+  width: 24px;
+  height: 24px;
+  box-shadow:
+    0 0 0 9px rgba(241, 224, 62, 0.35),
+    1px 2px 0 rgba(75, 49, 38, 0.3);
+}
+
+.notebook-map .map-point.point-start {
+  width: 72px;
+  height: 30px;
+  border: 3px solid #3679a4;
+  border-radius: 2px;
+  background: rgba(68, 137, 177, 0.12);
+  box-shadow: 2px 2px 0 rgba(36, 72, 94, 0.26);
+  color: #275f84;
+  transform: translate(-50%, -50%) rotate(1.4deg);
+}
+
+.notebook-map .map-point.point-start > span {
+  font: 900 12px/1 "Comic Sans MS", "Segoe Print", cursive;
+  letter-spacing: 0.08em;
+}
+
+.notebook-map .map-point.point-start small {
+  display: none;
+}
+
+.notebook-map .map-point.point-key,
+.notebook-map .map-point.point-exit,
+.notebook-map .map-point.point-clue {
+  width: 28px;
+  height: 28px;
+  border-color: rgba(88, 42, 28, 0.64);
+  background: #b74739;
+  box-shadow:
+    0 0 0 10px rgba(239, 232, 37, 0.58),
+    1px 2px 0 rgba(75, 49, 38, 0.3);
+  color: #fff4ce;
+}
+
+.notebook-map .map-point.point-exit {
+  border-radius: 3px;
+  transform: translate(-50%, -50%) rotate(-3deg);
+}
+
+.notebook-map .map-point.point-clue {
+  background: #774139;
+  box-shadow:
+    0 0 0 8px rgba(239, 232, 37, 0.36),
+    1px 2px 0 rgba(75, 49, 38, 0.3);
+}
+
+.notebook-map .map-point.point-key.selected,
+.notebook-map .map-point.point-exit.selected,
+.notebook-map .map-point.point-clue.selected {
+  background: #9f3028;
+  color: #fff4ce;
+  box-shadow:
+    0 0 0 10px rgba(239, 232, 37, 0.66),
+    1px 2px 0 rgba(75, 49, 38, 0.3);
+}
+
+.notebook-map .draw-hint {
+  top: 72%;
+  left: 51%;
+  z-index: 8;
+  border: 2px solid rgba(44, 91, 124, 0.46);
+  border-radius: 2px;
+  background: rgba(226, 219, 190, 0.94);
+  box-shadow: 3px 4px 0 rgba(61, 52, 39, 0.17);
+  color: #3b3932;
+  transform: translate(-50%, -50%) rotate(-1.5deg);
+  animation: hint-float 0.8s ease-in-out infinite alternate;
+}
+
+.notebook-map .draw-hint > span {
+  color: #3377a2;
+  font-size: 19px;
+}
+
+.notebook-map .draw-hint small {
+  color: #5e594d;
+}
+
+.notebook-map .map-callout {
+  z-index: 7;
+  border: 1px solid rgba(76, 62, 43, 0.44);
+  border-radius: 1px;
+  background: rgba(232, 224, 192, 0.86);
+  color: #3d3930;
+  box-shadow: 2px 3px 0 rgba(62, 52, 38, 0.16);
+  font-family: "Comic Sans MS", "Segoe Print", cursive;
+}
+
+.notebook-map .map-callout span {
+  color: #8b2f28;
+}
+
+.notebook-map .key-callout {
+  top: 35%;
+  left: 35%;
+  transform: rotate(-4deg);
+}
+
+.notebook-map .killer-callout {
+  top: 12%;
+  left: 3%;
+  border-color: rgba(145, 48, 39, 0.5);
+  background: rgba(231, 210, 173, 0.9);
+  color: #7d2923;
+  transform: rotate(-5deg);
+}
+
+.notebook-scribbles {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  pointer-events: none;
+  color: rgba(65, 59, 49, 0.47);
+  font: 700 12px/1 "Comic Sans MS", "Segoe Print", cursive;
+}
+
+.notebook-scribbles span {
+  position: absolute;
+  padding: 3px 7px;
+  background:
+    linear-gradient(transparent 28%, rgba(237, 226, 39, 0.38) 29% 82%, transparent 83%);
+}
+
+.notebook-scribbles span:nth-child(1) {
+  top: 45%;
+  left: 6%;
+  transform: rotate(-12deg);
+}
+
+.notebook-scribbles span:nth-child(2) {
+  right: 17%;
+  bottom: 15%;
+  transform: rotate(8deg);
+}
+
+.notebook-scribbles span:nth-child(3) {
+  top: 5%;
+  right: 4%;
+  transform: rotate(-4deg);
+}
+
+.stroke-status {
+  position: absolute;
+  z-index: 9;
+  right: 14px;
+  bottom: 12px;
+  display: flex;
+  max-width: calc(100% - 28px);
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid rgba(69, 61, 49, 0.3);
+  background: rgba(228, 220, 191, 0.92);
+  color: #575146;
+  font: 700 9px/1.3 var(--font-mono);
+  box-shadow: 2px 2px 0 rgba(55, 48, 38, 0.12);
+  pointer-events: none;
+}
+
+.stroke-status span {
+  color: #7d7565;
+}
+
+.stroke-status.active {
+  border-color: rgba(161, 49, 41, 0.52);
+  color: #802e28;
+}
+
+.stroke-status.active span {
+  color: #b63f34;
+}
+
+.route-edit-actions.single {
+  grid-template-columns: 1fr;
+}
+
+.instruction-step.optional {
+  opacity: 0.62;
+}
+
+.instruction-step.optional.done {
+  opacity: 0.9;
+}
+
+.route-validation.risk {
+  border-color: var(--route-short);
+  background: rgba(240, 198, 90, 0.06);
+}
+
+.route-validation.risk > span {
+  border-color: var(--route-short);
+  color: var(--route-short);
+}
+
+@keyframes notebook-node-pulse {
+  to {
+    box-shadow:
+      0 0 0 11px rgba(213, 221, 57, 0.45),
+      1px 2px 0 rgba(75, 49, 38, 0.26);
+  }
+}
+
+@media (max-width: 720px) {
+  .notebook-map {
+    min-height: 430px;
+  }
+
+  .notebook-map .map-point small {
+    display: none;
+  }
+
+  .notebook-map .map-point.point-start {
+    width: 60px;
+    height: 28px;
+  }
+
+  .notebook-scribbles span:nth-child(1),
+  .notebook-scribbles span:nth-child(2) {
+    display: none;
+  }
+
+  .notebook-map .draw-hint {
+    top: 70%;
+    left: 50%;
+    width: min(250px, 72%);
+  }
+}
