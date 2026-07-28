@@ -216,27 +216,27 @@ export default function RunnerScene3D({
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.9;
+    renderer.toneMappingExposure = 1.14;
     renderer.domElement.className = "runner-3d-canvas";
     renderer.domElement.setAttribute("aria-hidden", "true");
     mount.prepend(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x030605);
-    scene.fog = new THREE.FogExp2(0x070b0a, 0.042);
+    scene.background = new THREE.Color(0x0b100e);
+    scene.fog = new THREE.FogExp2(0x0b100e, 0.031);
 
     const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 150);
     camera.position.set(0, 4.8, 9.2);
 
-    const ambient = new THREE.HemisphereLight(0x899895, 0x080a09, 0.48);
+    const ambient = new THREE.HemisphereLight(0xaeb8b2, 0x111713, 0.88);
     scene.add(ambient);
 
     const flashlight = new THREE.SpotLight(
       0xffecc6,
-      15,
-      34,
-      Math.PI / 5.2,
-      0.58,
+      18.5,
+      40,
+      Math.PI / 4.7,
+      0.62,
       1.35,
     );
     flashlight.position.set(0, 4.45, 6.3);
@@ -247,9 +247,13 @@ export default function RunnerScene3D({
     flashlight.target.position.set(0, 1.9, -12);
     scene.add(flashlight, flashlight.target);
 
-    const coldFill = new THREE.DirectionalLight(0x6a8588, 0.34);
+    const coldFill = new THREE.DirectionalLight(0x789697, 0.62);
     coldFill.position.set(6, 8, -12);
     scene.add(coldFill);
+
+    const tunnelFill = new THREE.DirectionalLight(0xb5ad91, 0.34);
+    tunnelFill.position.set(-5, 4, 5);
+    scene.add(tunnelFill);
 
     const dangerLight = new THREE.PointLight(0xb92018, 0, 9, 2);
     scene.add(dangerLight);
@@ -418,9 +422,9 @@ export default function RunnerScene3D({
 
       const overhead = new THREE.PointLight(
         index % 3 === 1 ? 0x64716c : 0xc6c09d,
-        index % 3 === 1 ? 0.16 : 1.25,
-        11,
-        2.1,
+        index % 3 === 1 ? 0.38 : 2.15,
+        14,
+        1.85,
       );
       overhead.position.set(0, 5.65, -5.8);
       chunk.add(overhead);
@@ -797,7 +801,7 @@ export default function RunnerScene3D({
       ceilingLights.forEach((light, index) => {
         if (index % 3 === 1) {
           light.intensity =
-            Math.sin(elapsed * 13 + index * 2.3) > 0.74 ? 0.54 : 0.08;
+            Math.sin(elapsed * 13 + index * 2.3) > 0.74 ? 0.95 : 0.24;
         }
       });
 
@@ -873,8 +877,8 @@ export default function RunnerScene3D({
       flashlight.target.position.y = 2.05;
       flashlight.target.position.z = -13.5;
       flashlight.intensity =
-        14.2 + Math.sin(elapsed * 1.7) * 0.35 -
-        current.monsterPressure * 1.15;
+        18 + Math.sin(elapsed * 1.7) * 0.4 -
+        current.monsterPressure * 0.75;
 
       renderer.render(scene, camera);
     }
