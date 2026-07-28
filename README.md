@@ -70,6 +70,17 @@ npm run lint
 - CSS 2D 視覺與互動動畫
 - Cloudflare Worker 相容建置
 
+## 部署
+
+專案同時保留兩條互不干擾的建置路徑：
+
+- `npm run build`：產生 Vinext／Cloudflare Worker 成品，供既有 Sites 部署使用。
+- `npm run build:vercel`：執行標準 Next.js 建置，供 Vercel Git 自動部署使用。
+
+`tsconfig.vercel.json` 只檢查 Next.js 應用程式範圍，避免 Vercel 建置載入僅存在於 Cloudflare Worker 的 D1 型別；原本的 `tsconfig.json` 與 Worker 原始碼保持不變。
+
+將 GitHub repository 匯入 Vercel 後，`vercel.json` 會指定 Next.js Framework、`npm ci` 安裝與 Vercel 專用建置指令。Vercel 的 Production Branch 應設為 `main`；其他分支與 Pull Request 可作為 Preview Deployment。
+
 ## 專案結構
 
 ```text
