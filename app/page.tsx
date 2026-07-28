@@ -8,7 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
-import RunnerScene3D from "./RunnerScene3D";
+import RunnerScene3D, {
+  DEFAULT_SCENE_TUNING,
+  type SceneTuning,
+} from "./RunnerScene3D";
 
 type GamePhase =
   | "planning"
@@ -184,6 +187,52 @@ function buildRouteConfig(nodeIds: MapNodeId[]): RouteConfig {
 }
 
 const EMPTY_ROUTE = buildRouteConfig(["start"]);
+const SCENE_TUNING_STORAGE_KEY = "escape-door-scene-tuning-v1";
+
+const SCENE_TUNING_CONTROLS: Array<{
+  key: keyof SceneTuning;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+}> = [
+  { key: "exposure", label: "整體曝光", min: 0.75, max: 1.8, step: 0.01 },
+  { key: "concrete", label: "水泥灰度", min: 0.55, max: 1.55, step: 0.01 },
+  { key: "ambient", label: "環境光", min: 0.2, max: 2.2, step: 0.02 },
+  { key: "flashlight", label: "手電筒", min: 4, max: 32, step: 0.5 },
+  { key: "ceiling", label: "頂燈亮度", min: 0.2, max: 4, step: 0.05 },
+  { key: "fog", label: "霧氣濃度", min: 0.008, max: 0.06, step: 0.001 },
+  { key: "vignette", label: "邊緣暗角", min: 0, max: 0.85, step: 0.01 },
+];
+
+function formatTuningValue(key: keyof SceneTuning, value: number) {
+  if (key === "fog") return value.toFixed(3);
+  if (key === "flashlight") return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function readStoredSceneTuning() {
+  const restored = { ...DEFAULT_SCENE_TUNING };
+  if (typeof window === "undefined") return restored;
+
+  try {
+    const saved = window.localStorage.getItem(SCENE_TUNING_STORAGE_KEY);
+    if (!saved) return restored;
+    const parsed = JSON.parse(saved) as Partial<SceneTuning>;
+    for (const control of SCENE_TUNING_CONTROLS) {
+      const candidate = parsed[control.key];
+      if (typeof candidate === "number" && Number.isFinite(candidate)) {
+        restored[control.key] = Math.min(
+          control.max,
+          Math.max(control.min, candidate),
+        );
+      }
+    }
+  } catch {
+    window.localStorage.removeItem(SCENE_TUNING_STORAGE_KEY);
+  }
+  return restored;
+}
 
 const PHASE_ITEMS = [
   { key: "planning", label: "規劃" },
@@ -252,9 +301,18 @@ export default function Home() {
   const [failureReason, setFailureReason] = useState("");
   const [soundOn, setSoundOn] = useState(true);
   const [routeLocked, setRouteLocked] = useState<RouteConfig | null>(null);
+  const [sceneTuning, setSceneTuning] =
+    useState<SceneTuning>(readStoredSceneTuning);
 
   const seenRef = useRef<Set<ClueId>>(new Set());
   const audioRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      SCENE_TUNING_STORAGE_KEY,
+      JSON.stringify(sceneTuning),
+    );
+  }, [sceneTuning]);
 
   const plannedRoute = useMemo(
     () => buildRouteConfig(plannedNodeIds),
@@ -695,6 +753,11 @@ export default function Home() {
             focusedClue={focusedClue}
             seenClueIds={seenClueIds}
             onFocus={focusCurrentClue}
+            tuning={sceneTuning}
+            onTuningChange={setSceneTuning}
+            onResetTuning={() =>
+              setSceneTuning({ ...DEFAULT_SCENE_TUNING })
+            }
           />
         )}
 
@@ -997,6 +1060,9 @@ function RunningScreen({
   focusedClue,
   seenClueIds,
   onFocus,
+  tuning,
+  onTuningChange,
+  onResetTuning,
 }: {
   route: RouteConfig;
   progress: number;
@@ -1004,6 +1070,9 @@ function RunningScreen({
   focusedClue: Clue | null;
   seenClueIds: ClueId[];
   onFocus: () => void;
+  tuning: SceneTuning;
+  onTuningChange: (next: SceneTuning) => void;
+  onResetTuning: () => void;
 }) {
   const segmentCount = Math.max(1, route.nodeIds.length - 1);
   const segmentProgress = Math.min(
@@ -1047,6 +1116,7 @@ function RunningScreen({
     "--progress": progress,
     "--monster-pressure": monsterPressure,
     "--route-turn": turnValue,
+    "--corridor-vignette": tuning.vignette,
   } as CSSProperties;
 
   return (
@@ -1085,7 +1155,56 @@ function RunningScreen({
           clueActive={Boolean(activeClue)}
           clueKind={activeClue?.id ?? null}
           clueText={activeClue?.value ?? ""}
+          tuning={tuning}
         />
+
+        <details
+          className="scene-tuning-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <summary>
+            <span>☼</span>
+            <b>畫面參數</b>
+            <small>即時調整</small>
+          </summary>
+          <div className="scene-tuning-body">
+            <div className="scene-tuning-heading">
+              <p>
+                <b>地下通道調校</b>
+                <small>設定會自動保存在這台裝置</small>
+              </p>
+              <button type="button" onClick={onResetTuning}>
+                恢復預設
+              </button>
+            </div>
+            <div className="scene-tuning-controls">
+              {SCENE_TUNING_CONTROLS.map((control) => (
+                <label key={control.key}>
+                  <span>
+                    <b>{control.label}</b>
+                    <output>
+                      {formatTuningValue(control.key, tuning[control.key])}
+                    </output>
+                  </span>
+                  <input
+                    type="range"
+                    min={control.min}
+                    max={control.max}
+                    step={control.step}
+                    value={tuning[control.key]}
+                    aria-label={control.label}
+                    onChange={(event) =>
+                      onTuningChange({
+                        ...tuning,
+                        [control.key]: Number(event.currentTarget.value),
+                      })
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </details>
 
         <div className="chase-cinematic-label" aria-hidden="true">
           <span>{chaseState === "lookback" ? "回頭確認" : "路線執行中"}</span>
