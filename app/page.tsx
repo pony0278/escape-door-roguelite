@@ -609,7 +609,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P2.0</p>
+            <p>PHASE P2.1</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -737,7 +737,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>3D 第三人稱追逐測試</span>
+        <span>地下水泥通道與牆面提示</span>
         <p>
           {phase === "planning"
             ? "拖曳或依序點擊節點畫線 · Backspace 返回 · Esc 清除"
@@ -1083,6 +1083,8 @@ function RunningScreen({
           monsterPressure={monsterPressure}
           monsterDistance={monsterDistance}
           clueActive={Boolean(activeClue)}
+          clueKind={activeClue?.id ?? null}
+          clueText={activeClue?.value ?? ""}
         />
 
         <div className="chase-cinematic-label" aria-hidden="true">
@@ -1099,13 +1101,13 @@ function RunningScreen({
         {activeClue && (
           <button
             type="button"
-            className="clue-target"
+            className={`clue-target clue-wall-${activeClue.id}`}
             onClick={onFocus}
             aria-label={`聚焦${activeClue.eyebrow}`}
           >
             <span className="clue-rings" />
             <b>{activeClue.icon}</b>
-            <small>聚焦！</small>
+            <small>讀取牆面</small>
           </button>
         )}
 
