@@ -300,11 +300,13 @@ export default function Home() {
   const [closingStep, setClosingStep] = useState<ClosingStep>("close");
   const [failureReason, setFailureReason] = useState("");
   const [soundOn, setSoundOn] = useState(true);
+  const [runPaused, setRunPaused] = useState(false);
   const [routeLocked, setRouteLocked] = useState<RouteConfig | null>(null);
   const [sceneTuning, setSceneTuning] =
     useState<SceneTuning>(readStoredSceneTuning);
 
   const seenRef = useRef<Set<ClueId>>(new Set());
+  const runPausedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
@@ -364,6 +366,8 @@ export default function Home() {
   }, []);
 
   const resetRun = useCallback(() => {
+    runPausedRef.current = false;
+    setRunPaused(false);
     setPhase("planning");
     setRouteLocked(null);
     setPlannedNodeIds(["start"]);
@@ -402,6 +406,8 @@ export default function Home() {
     setSeenClueIds([]);
     setMissedClueIds([]);
     seenRef.current = new Set();
+    runPausedRef.current = false;
+    setRunPaused(false);
     setPhase("running");
     playTone(180, 0.14, 0.045);
   }, [plannedRoute, playTone, routeHasKey, routeIsValid]);
@@ -471,60 +477,90 @@ export default function Home() {
     window.setTimeout(() => setFocusedClue(null), 1750);
   }, [activeClue, phase, playTone]);
 
+  const toggleRunPause = useCallback(() => {
+    if (phase !== "running") return;
+    const next = !runPausedRef.current;
+    runPausedRef.current = next;
+    setRunPaused(next);
+    playTone(next ? 170 : 320, 0.08, 0.025);
+  }, [phase, playTone]);
+
   useEffect(() => {
     if (phase !== "running") return;
 
     const route = currentRoute;
-    const startedAt = performance.now();
-    const timeouts: number[] = [];
-    const progressTimer = window.setInterval(() => {
-      const elapsed = performance.now() - startedAt;
-      setRunProgress(Math.min(1, elapsed / route.durationMs));
-    }, 40);
+    let elapsedMs = 0;
+    let previousTick = performance.now();
+    let finished = false;
+    const revealedClues = new Set<ClueId>();
+    let activeWindow: { clueId: ClueId; expiresAt: number } | null = null;
 
-    route.events.forEach((event) => {
-      const showAt = route.durationMs * event.at;
-      const revealTimer = window.setTimeout(() => {
+    const progressTimer = window.setInterval(() => {
+      const now = performance.now();
+      const delta = now - previousTick;
+      previousTick = now;
+      if (runPausedRef.current || finished) return;
+
+      elapsedMs += delta;
+      setRunProgress(Math.min(1, elapsedMs / route.durationMs));
+
+      route.events.forEach((event) => {
+        const showAt = route.durationMs * event.at;
+        if (revealedClues.has(event.clueId) || elapsedMs < showAt) return;
+        revealedClues.add(event.clueId);
         const clue = CLUES[event.clueId];
         setActiveClue(clue);
         playTone(430, 0.07, 0.028);
+        activeWindow = {
+          clueId: event.clueId,
+          expiresAt: elapsedMs + route.clueWindowMs,
+        };
+      });
 
-        const hideTimer = window.setTimeout(() => {
-          setActiveClue((current) =>
-            current?.id === event.clueId ? null : current,
+      if (activeWindow && elapsedMs >= activeWindow.expiresAt) {
+        const expiredClueId = activeWindow.clueId;
+        activeWindow = null;
+        setActiveClue((current) =>
+          current?.id === expiredClueId ? null : current,
+        );
+        if (!seenRef.current.has(expiredClueId)) {
+          setMissedClueIds((current) =>
+            current.includes(expiredClueId)
+              ? current
+              : [...current, expiredClueId],
           );
-          if (!seenRef.current.has(event.clueId)) {
-            setMissedClueIds((current) =>
-              current.includes(event.clueId)
-                ? current
-                : [...current, event.clueId],
-            );
-          }
-        }, route.clueWindowMs);
-        timeouts.push(hideTimer);
-      }, showAt);
-      timeouts.push(revealTimer);
-    });
+        }
+      }
 
-    const finishTimer = window.setTimeout(() => {
-      setRunProgress(1);
-      setActiveClue(null);
-      setFocusedClue(null);
-      setTimeLeft(route.doorTimeSeconds);
-      setLastStruggle(false);
-      setLockStep("rotation");
-      setTurns(0);
-      setKnocks(0);
-      setPhase("door");
-      playTone(240, 0.18, 0.05);
-    }, route.durationMs);
-    timeouts.push(finishTimer);
+      if (elapsedMs >= route.durationMs) {
+        finished = true;
+        runPausedRef.current = false;
+        setRunPaused(false);
+        setRunProgress(1);
+        setActiveClue(null);
+        setFocusedClue(null);
+        setTimeLeft(route.doorTimeSeconds);
+        setLastStruggle(false);
+        setLockStep("rotation");
+        setTurns(0);
+        setKnocks(0);
+        setPhase("door");
+        playTone(240, 0.18, 0.05);
+        window.clearInterval(progressTimer);
+      }
+    }, 40);
 
     return () => {
       window.clearInterval(progressTimer);
-      timeouts.forEach((timer) => window.clearTimeout(timer));
     };
   }, [currentRoute, phase, playTone]);
+
+  useEffect(() => {
+    if (phase !== "running") return;
+    return () => {
+      runPausedRef.current = false;
+    };
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "door" && phase !== "closing") return;
@@ -576,6 +612,10 @@ export default function Home() {
         event.preventDefault();
         focusCurrentClue();
       }
+      if (phase === "running" && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        toggleRunPause();
+      }
       if ((phase === "success" || phase === "fail") && event.key.toLowerCase() === "r") {
         resetRun();
       }
@@ -590,6 +630,7 @@ export default function Home() {
     resetRun,
     routeIsValid,
     startRun,
+    toggleRunPause,
     undoRouteNode,
   ]);
 
@@ -749,10 +790,12 @@ export default function Home() {
           <RunningScreen
             route={currentRoute}
             progress={runProgress}
+            paused={runPaused}
             activeClue={activeClue}
             focusedClue={focusedClue}
             seenClueIds={seenClueIds}
             onFocus={focusCurrentClue}
+            onPauseToggle={toggleRunPause}
             tuning={sceneTuning}
             onTuningChange={setSceneTuning}
             onResetTuning={() =>
@@ -805,7 +848,7 @@ export default function Home() {
           {phase === "planning"
             ? "拖曳或依序點擊節點畫線 · Backspace 返回 · Esc 清除"
             : phase === "running"
-              ? "快捷鍵：Space 聚焦提示"
+              ? "快捷鍵：P 暫停／繼續 · Space 聚焦提示"
               : phase === "success" || phase === "fail"
                 ? "快捷鍵：R 再試一次"
                 : "錯誤操作會損失 0.8 秒"}
@@ -1056,20 +1099,24 @@ function PlanningScreen({
 function RunningScreen({
   route,
   progress,
+  paused,
   activeClue,
   focusedClue,
   seenClueIds,
   onFocus,
+  onPauseToggle,
   tuning,
   onTuningChange,
   onResetTuning,
 }: {
   route: RouteConfig;
   progress: number;
+  paused: boolean;
   activeClue: Clue | null;
   focusedClue: Clue | null;
   seenClueIds: ClueId[];
   onFocus: () => void;
+  onPauseToggle: () => void;
   tuning: SceneTuning;
   onTuningChange: (next: SceneTuning) => void;
   onResetTuning: () => void;
@@ -1143,7 +1190,9 @@ function RunningScreen({
       </div>
 
       <div
-        className={`chase-stage runner-3d-stage ${turnClass} chase-${chaseState}`}
+        className={`chase-stage runner-3d-stage ${turnClass} chase-${chaseState} ${
+          paused ? "is-paused" : ""
+        }`}
         style={stageStyle}
         aria-label={`第三人稱追逐演出，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
       >
@@ -1156,7 +1205,20 @@ function RunningScreen({
           clueKind={activeClue?.id ?? null}
           clueText={activeClue?.value ?? ""}
           tuning={tuning}
+          paused={paused}
         />
+
+        <button
+          type="button"
+          className={`run-pause-button ${paused ? "paused" : ""}`}
+          onClick={onPauseToggle}
+          aria-pressed={paused}
+          aria-label={paused ? "繼續奔跑" : "暫停奔跑"}
+        >
+          <span aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span>
+          <b>{paused ? "繼續奔跑" : "暫停"}</b>
+          <small>P</small>
+        </button>
 
         <details
           className="scene-tuning-panel"
@@ -1205,6 +1267,14 @@ function RunningScreen({
             </div>
           </div>
         </details>
+
+        {paused && (
+          <div className="run-paused-overlay" role="status">
+            <span>PAUSED</span>
+            <b>奔跑已暫停</b>
+            <small>現在可以安心調整右上角的畫面參數</small>
+          </div>
+        )}
 
         <div className="chase-cinematic-label" aria-hidden="true">
           <span>{chaseState === "lookback" ? "回頭確認" : "路線執行中"}</span>
