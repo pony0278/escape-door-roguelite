@@ -4106,7 +4106,7 @@ button:focus-visible {
 .notebook-map::before,
 .notebook-map::after {
   position: absolute;
-  z-index: 1;
+  z-index: 8;
   inset: 8px;
   content: "";
   border: 2px solid rgba(61, 56, 47, 0.55);
@@ -4115,6 +4115,7 @@ button:focus-visible {
 }
 
 .notebook-map::after {
+  z-index: 1;
   inset: 0;
   border: 0;
   background:
@@ -4148,38 +4149,37 @@ button:focus-visible {
   z-index: 2;
 }
 
-.notebook-map .map-corridor {
-  opacity: 0.58;
-  stroke: #45423b;
-  stroke-width: 4.5;
-  stroke-linecap: round;
+.notebook-paper-canvas,
+.notebook-route-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
-.notebook-map .map-corridor:nth-child(3n + 1) {
-  opacity: 0.4;
-  stroke-width: 6.5;
+.notebook-paper-canvas {
+  z-index: 1;
+  opacity: 0.95;
+  mix-blend-mode: multiply;
 }
 
-.notebook-map .drawn-route-shadow {
-  opacity: 0.3;
-  stroke: #4c352f;
-  stroke-width: 10;
+.notebook-route-canvas {
+  z-index: 3;
+  filter: drop-shadow(1px 1px 0 rgba(82, 31, 27, 0.22));
+  mix-blend-mode: multiply;
 }
 
-.notebook-map .drawn-route {
-  stroke: #a9362d;
-  stroke-width: 5.5;
-  stroke-dasharray: none;
-  filter: drop-shadow(1px 1px 0 rgba(82, 31, 27, 0.34));
-  animation: none;
+.notebook-map.is-drawing .notebook-route-canvas {
+  filter:
+    drop-shadow(1px 1px 0 rgba(82, 31, 27, 0.22))
+    saturate(1.08);
 }
 
-.notebook-map .drawn-route-live {
-  opacity: 0.68;
-  stroke: #a9362d;
-  stroke-width: 3.5;
-  stroke-dasharray: 8 7;
-  stroke-linecap: round;
+.notebook-map .route-map > g {
+  opacity: 0.97;
+  mix-blend-mode: multiply;
 }
 
 .notebook-map .map-point {
@@ -4364,18 +4364,29 @@ button:focus-visible {
 }
 
 .notebook-scribbles span:nth-child(1) {
+  top: 5%;
+  left: 8%;
+  padding: 0;
+  background: none;
+  color: rgba(51, 47, 40, 0.67);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  transform: rotate(-2deg);
+}
+
+.notebook-scribbles span:nth-child(2) {
   top: 45%;
   left: 6%;
   transform: rotate(-12deg);
 }
 
-.notebook-scribbles span:nth-child(2) {
+.notebook-scribbles span:nth-child(3) {
   right: 17%;
   bottom: 15%;
   transform: rotate(8deg);
 }
 
-.notebook-scribbles span:nth-child(3) {
+.notebook-scribbles span:nth-child(4) {
   top: 5%;
   right: 4%;
   transform: rotate(-4deg);
@@ -4456,9 +4467,15 @@ button:focus-visible {
     height: 28px;
   }
 
-  .notebook-scribbles span:nth-child(1),
-  .notebook-scribbles span:nth-child(2) {
+  .notebook-scribbles span:nth-child(2),
+  .notebook-scribbles span:nth-child(3) {
     display: none;
+  }
+
+  .notebook-scribbles span:nth-child(1) {
+    top: 4%;
+    left: 5%;
+    font-size: 11px;
   }
 
   .notebook-map .draw-hint {
