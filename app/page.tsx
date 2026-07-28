@@ -94,18 +94,18 @@ const CLUES: Record<ClueId, Clue> = {
 };
 
 const MAP_NODES: MapNode[] = [
-  { id: "start", x: 420, y: 352, label: "玩家起點", shortLabel: "你", type: "start" },
-  { id: "northEntry", x: 205, y: 292, label: "西側岔路", shortLabel: "A", type: "normal" },
-  { id: "middleEntry", x: 420, y: 274, label: "中央走廊", shortLabel: "B", type: "normal" },
-  { id: "southEntry", x: 632, y: 300, label: "東側岔路", shortLabel: "C", type: "normal" },
-  { id: "turnClue", x: 128, y: 168, label: "可疑機械室", shortLabel: "?", type: "clue", clueId: "turn" },
-  { id: "middleHub", x: 410, y: 194, label: "中央機房", shortLabel: "D", type: "normal" },
-  { id: "southStore", x: 700, y: 205, label: "廢棄倉庫", shortLabel: "E", type: "normal" },
-  { id: "key", x: 325, y: 102, label: "銅鑰匙", shortLabel: "◆", type: "key" },
-  { id: "northExit", x: 485, y: 68, label: "北側長廊", shortLabel: "F", type: "normal" },
-  { id: "middleExit", x: 612, y: 105, label: "直通走廊", shortLabel: "G", type: "normal" },
-  { id: "knockClue", x: 700, y: 146, label: "可疑維修區", shortLabel: "?", type: "clue", clueId: "knock" },
-  { id: "exit", x: 782, y: 68, label: "逃生門", shortLabel: "門", type: "exit" },
+  { id: "start", x: 540, y: 615, label: "玩家起點", shortLabel: "你", type: "start" },
+  { id: "northEntry", x: 330, y: 468, label: "西側岔路", shortLabel: "A", type: "normal" },
+  { id: "middleEntry", x: 505, y: 545, label: "中央走廊", shortLabel: "B", type: "normal" },
+  { id: "southEntry", x: 705, y: 426, label: "東側岔路", shortLabel: "C", type: "normal" },
+  { id: "turnClue", x: 330, y: 245, label: "可疑機械室", shortLabel: "?", type: "clue", clueId: "turn" },
+  { id: "middleHub", x: 540, y: 305, label: "中央機房", shortLabel: "D", type: "normal" },
+  { id: "southStore", x: 832, y: 334, label: "廢棄倉庫", shortLabel: "E", type: "normal" },
+  { id: "key", x: 655, y: 258, label: "銅鑰匙", shortLabel: "◆", type: "key" },
+  { id: "northExit", x: 488, y: 178, label: "北側長廊", shortLabel: "F", type: "normal" },
+  { id: "middleExit", x: 628, y: 190, label: "直通走廊", shortLabel: "G", type: "normal" },
+  { id: "knockClue", x: 705, y: 145, label: "可疑維修區", shortLabel: "?", type: "clue", clueId: "knock" },
+  { id: "exit", x: 866, y: 125, label: "逃生門", shortLabel: "門", type: "exit" },
 ];
 
 const MAP_EDGES: Array<readonly [MapNodeId, MapNodeId]> = [
@@ -134,6 +134,50 @@ const MAP_EDGES: Array<readonly [MapNodeId, MapNodeId]> = [
 const MAP_NODE_LOOKUP = Object.fromEntries(
   MAP_NODES.map((node) => [node.id, node]),
 ) as Record<MapNodeId, MapNode>;
+
+const MAP_WIDTH = 1100;
+const MAP_HEIGHT = 700;
+
+const MAP_EDGE_WAYPOINTS: Record<string, Array<{ x: number; y: number }>> = {
+  "start:northEntry": [{ x: 440, y: 560 }, { x: 350, y: 510 }],
+  "start:middleEntry": [{ x: 528, y: 590 }],
+  "start:southEntry": [{ x: 580, y: 524 }, { x: 655, y: 488 }],
+  "northEntry:turnClue": [{ x: 350, y: 390 }, { x: 385, y: 335 }],
+  "northEntry:middleHub": [{ x: 420, y: 430 }, { x: 505, y: 350 }],
+  "middleEntry:middleHub": [{ x: 525, y: 430 }, { x: 536, y: 350 }],
+  "southEntry:middleHub": [{ x: 662, y: 382 }, { x: 630, y: 340 }],
+  "southEntry:southStore": [{ x: 780, y: 380 }],
+  "turnClue:northExit": [{ x: 380, y: 208 }],
+  "middleHub:middleExit": [{ x: 590, y: 286 }, { x: 630, y: 230 }],
+  "southStore:knockClue": [{ x: 852, y: 236 }],
+  "turnClue:key": [{ x: 420, y: 282 }, { x: 560, y: 280 }],
+  "middleHub:key": [{ x: 590, y: 286 }],
+  "southStore:key": [{ x: 760, y: 280 }],
+  "key:northExit": [{ x: 590, y: 225 }, { x: 548, y: 166 }],
+  "key:middleExit": [{ x: 640, y: 225 }],
+  "key:knockClue": [{ x: 690, y: 225 }],
+  "northExit:exit": [{ x: 548, y: 166 }, { x: 760, y: 150 }],
+  "middleExit:exit": [{ x: 760, y: 150 }],
+  "knockClue:exit": [{ x: 790, y: 132 }],
+};
+
+function getMapEdgePoints(fromId: MapNodeId, toId: MapNodeId) {
+  const key = `${fromId}:${toId}`;
+  const reverseKey = `${toId}:${fromId}`;
+  const waypoints = MAP_EDGE_WAYPOINTS[key];
+  if (waypoints) {
+    return [MAP_NODE_LOOKUP[fromId], ...waypoints, MAP_NODE_LOOKUP[toId]];
+  }
+  const reverseWaypoints = MAP_EDGE_WAYPOINTS[reverseKey];
+  if (reverseWaypoints) {
+    return [
+      MAP_NODE_LOOKUP[fromId],
+      ...[...reverseWaypoints].reverse(),
+      MAP_NODE_LOOKUP[toId],
+    ];
+  }
+  return [MAP_NODE_LOOKUP[fromId], MAP_NODE_LOOKUP[toId]];
+}
 
 function areConnected(from: MapNodeId, to: MapNodeId) {
   return MAP_EDGES.some(
@@ -853,7 +897,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>Rough.js 潦草筆記本逃亡地圖</span>
+        <span>潦草筆記本地圖 · 範本校正版</span>
         <p>
           {phase === "planning"
             ? "從 START 按住一筆畫 · 放開完成 · Esc 清除"
@@ -897,13 +941,11 @@ function PlanningScreen({
     y: number;
   } | null>(null);
   const [strokeMessage, setStrokeMessage] = useState(
-    "筆尖必須從藍色 START 開始",
+    "請從底部 YOU ARE HERE 開始規劃。",
   );
   const stageRef = useRef<HTMLDivElement>(null);
-  const paperCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mapCanvasRef = useRef<HTMLCanvasElement>(null);
   const routeCanvasRef = useRef<HTMLCanvasElement>(null);
-  const roughSvgRef = useRef<SVGSVGElement>(null);
-  const roughMapLayerRef = useRef<SVGGElement>(null);
   const activePointerRef = useRef<number | null>(null);
   const lastNodeId = plannedNodeIds.at(-1) ?? "start";
   const lastNode = MAP_NODE_LOOKUP[lastNodeId];
@@ -911,227 +953,490 @@ function PlanningScreen({
   const finalLocation = MAP_NODE_LOOKUP[lastNodeId].label;
 
   useEffect(() => {
-    const canvas = paperCanvasRef.current;
+    const canvas = mapCanvasRef.current;
     if (!canvas) return;
     const context = canvas.getContext("2d");
     if (!context) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = 840 * dpr;
-    canvas.height = 390 * dpr;
+    canvas.width = MAP_WIDTH * dpr;
+    canvas.height = MAP_HEIGHT * dpr;
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.clearRect(0, 0, 840, 390);
+    context.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
     let paperSeed = 20260728;
     const random = () => {
-      paperSeed = Math.imul(paperSeed ^ (paperSeed >>> 15), 1 | paperSeed);
-      paperSeed ^= paperSeed + Math.imul(paperSeed ^ (paperSeed >>> 7), 61 | paperSeed);
-      return ((paperSeed ^ (paperSeed >>> 14)) >>> 0) / 4294967296;
+      let value = paperSeed += 0x6d2b79f5;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+    const rand = (minimum: number, maximum: number) =>
+      minimum + (maximum - minimum) * random();
+    const jitter = (value: number, amount = 2) =>
+      value + rand(-amount, amount);
+    const handLine = (
+      from: { x: number; y: number },
+      to: { x: number; y: number },
+      {
+        color = "#3c342d",
+        width = 2.4,
+        passes = 2,
+        wobble = 2.4,
+        alpha = 1,
+      }: {
+        color?: string;
+        width?: number;
+        passes?: number;
+        wobble?: number;
+        alpha?: number;
+      } = {},
+    ) => {
+      context.save();
+      context.strokeStyle = color;
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.globalAlpha = alpha;
+
+      for (let pass = 0; pass < passes; pass += 1) {
+        const deltaX = to.x - from.x;
+        const deltaY = to.y - from.y;
+        const length = Math.max(1, Math.hypot(deltaX, deltaY));
+        const steps = Math.max(3, Math.floor(length / 26));
+        context.beginPath();
+        context.lineWidth = Math.max(0.7, width + rand(-0.4, 0.4));
+        context.moveTo(jitter(from.x, wobble), jitter(from.y, wobble));
+
+        for (let step = 1; step < steps; step += 1) {
+          const progress = step / steps;
+          const bend =
+            Math.sin(progress * Math.PI) *
+            rand(-wobble * 1.4, wobble * 1.4);
+          const pointX =
+            from.x +
+            deltaX * progress +
+            (-deltaY / length) * bend +
+            rand(-wobble, wobble);
+          const pointY =
+            from.y +
+            deltaY * progress +
+            (deltaX / length) * bend +
+            rand(-wobble, wobble);
+          context.lineTo(pointX, pointY);
+        }
+        context.lineTo(jitter(to.x, wobble), jitter(to.y, wobble));
+        context.stroke();
+      }
+      context.restore();
+    };
+    const handPolyline = (
+      points: Array<{ x: number; y: number }>,
+      options: Parameters<typeof handLine>[2] = {},
+    ) => {
+      points.slice(1).forEach((point, index) => {
+        handLine(points[index], point, options);
+      });
+    };
+    const handText = (
+      text: string,
+      x: number,
+      y: number,
+      size = 22,
+      rotation = 0,
+      color = "#23201c",
+      align: CanvasTextAlign = "left",
+    ) => {
+      context.save();
+      context.translate(x, y);
+      context.rotate(rotation);
+      context.fillStyle = color;
+      context.font = `700 ${size}px "Segoe Print", "Comic Sans MS", cursive`;
+      context.textAlign = align;
+      context.textBaseline = "middle";
+      context.fillText(text, 0, 0);
+      context.restore();
     };
 
     context.save();
     context.globalCompositeOperation = "multiply";
-
-    const stains = [
-      [148, 86, 92, 32, -0.22],
-      [635, 302, 122, 44, 0.17],
-      [742, 108, 58, 26, -0.35],
-      [362, 236, 78, 21, 0.08],
-    ] as const;
-    for (const [x, y, radiusX, radiusY, rotation] of stains) {
-      const stain = context.createRadialGradient(x, y, 2, x, y, radiusX);
-      stain.addColorStop(0, "rgba(100, 70, 42, 0.075)");
-      stain.addColorStop(0.7, "rgba(100, 70, 42, 0.028)");
-      stain.addColorStop(1, "rgba(100, 70, 42, 0)");
-      context.save();
-      context.translate(x, y);
-      context.rotate(rotation);
-      context.scale(1, radiusY / radiusX);
-      context.fillStyle = stain;
+    for (let index = 0; index < 9; index += 1) {
       context.beginPath();
-      context.arc(0, 0, radiusX, 0, Math.PI * 2);
+      context.ellipse(
+        rand(180, 930),
+        rand(90, 590),
+        rand(36, 110),
+        rand(18, 54),
+        rand(-0.5, 0.5),
+        0,
+        Math.PI * 2,
+      );
+      context.fillStyle = "rgba(163, 92, 86, 0.12)";
       context.fill();
-      context.restore();
-    }
-
-    context.strokeStyle = "rgba(118, 75, 67, 0.18)";
-    context.lineWidth = 1.1;
-    context.beginPath();
-    context.moveTo(52, 0);
-    context.lineTo(54, 390);
-    context.stroke();
-
-    for (let index = 0; index < 360; index += 1) {
-      const x = random() * 840;
-      const y = random() * 390;
-      const length = 1 + random() * 3.5;
-      context.strokeStyle = `rgba(67, 54, 39, ${0.018 + random() * 0.03})`;
-      context.lineWidth = 0.45 + random() * 0.45;
-      context.beginPath();
-      context.moveTo(x, y);
-      context.lineTo(x + length, y + (random() - 0.5) * 1.5);
-      context.stroke();
     }
     context.restore();
-  }, []);
 
-  useEffect(() => {
-    const svg = roughSvgRef.current;
-    const layer = roughMapLayerRef.current;
-    if (!svg || !layer) return;
-    let disposed = false;
+    handPolyline(
+      [
+        { x: 26, y: 28 },
+        { x: 1074, y: 32 },
+        { x: 1076, y: 654 },
+        { x: 28, y: 652 },
+        { x: 26, y: 28 },
+      ],
+      { width: 2.8, wobble: 2.8 },
+    );
 
-    void import("roughjs").then(({ default: rough }) => {
-      if (disposed) return;
-      layer.replaceChildren();
-      const roughSvg = rough.svg(svg);
+    const silhouetteX = 100;
+    const silhouetteY = 280;
+    handLine(
+      { x: silhouetteX - 42, y: silhouetteY - 110 },
+      { x: silhouetteX - 76, y: silhouetteY - 28 },
+      { width: 4, wobble: 3 },
+    );
+    handLine(
+      { x: silhouetteX - 76, y: silhouetteY - 28 },
+      { x: silhouetteX - 89, y: silhouetteY + 34 },
+      { width: 4, wobble: 3 },
+    );
+    handLine(
+      { x: silhouetteX + 44, y: silhouetteY - 110 },
+      { x: silhouetteX + 82, y: silhouetteY - 34 },
+      { width: 4, wobble: 3 },
+    );
+    handLine(
+      { x: silhouetteX + 82, y: silhouetteY - 34 },
+      { x: silhouetteX + 95, y: silhouetteY + 36 },
+      { width: 4, wobble: 3 },
+    );
+    context.beginPath();
+    context.arc(silhouetteX, silhouetteY - 70, 44, 0, Math.PI * 2);
+    context.strokeStyle = "#3c342d";
+    context.lineWidth = 4;
+    context.stroke();
+    handLine(
+      { x: silhouetteX, y: silhouetteY - 26 },
+      { x: silhouetteX, y: silhouetteY + 82 },
+      { width: 4, wobble: 2.5 },
+    );
+    handLine(
+      { x: silhouetteX, y: silhouetteY + 82 },
+      { x: silhouetteX - 18, y: silhouetteY + 196 },
+      { width: 4, wobble: 3 },
+    );
+    handLine(
+      { x: silhouetteX, y: silhouetteY + 82 },
+      { x: silhouetteX + 20, y: silhouetteY + 196 },
+      { width: 4, wobble: 3 },
+    );
+    handLine(
+      { x: silhouetteX - 2, y: silhouetteY + 16 },
+      { x: silhouetteX - 48, y: silhouetteY + 84 },
+      { width: 4, wobble: 3 },
+    );
+    handLine(
+      { x: silhouetteX + 2, y: silhouetteY + 16 },
+      { x: silhouetteX + 48, y: silhouetteY + 84 },
+      { width: 4, wobble: 3 },
+    );
 
-      const add = (element: SVGGElement) => {
-        if (!disposed) layer.appendChild(element);
-      };
+    handPolyline(
+      [
+        { x: 300, y: 224 },
+        { x: 246, y: 320 },
+        { x: 280, y: 443 },
+        { x: 445, y: 562 },
+        { x: 700, y: 545 },
+        { x: 850, y: 430 },
+        { x: 878, y: 240 },
+        { x: 814, y: 116 },
+      ],
+      {
+        width: 2.1,
+        wobble: 4.2,
+        color: "rgba(60, 52, 45, 0.44)",
+        passes: 1,
+      },
+    );
+    handPolyline(
+      [
+        { x: 412, y: 150 },
+        { x: 358, y: 228 },
+        { x: 399, y: 342 },
+        { x: 520, y: 432 },
+        { x: 684, y: 425 },
+        { x: 764, y: 334 },
+        { x: 740, y: 222 },
+        { x: 644, y: 170 },
+      ],
+      {
+        width: 2.1,
+        wobble: 4.2,
+        color: "rgba(60, 52, 45, 0.44)",
+        passes: 1,
+      },
+    );
 
-      const blockedAreas: Array<Array<[number, number]>> = [
-        [[65, 45], [170, 43], [188, 112], [105, 135], [66, 103]],
-        [[250, 185], [335, 162], [355, 230], [312, 264], [230, 244]],
-        [[522, 245], [611, 226], [658, 266], [624, 338], [548, 330]],
-        [[710, 212], [816, 190], [825, 282], [756, 296]],
-      ];
-
-      blockedAreas.forEach((points, index) => {
-        add(
-          roughSvg.polygon(points, {
-            seed: 810 + index,
-            stroke: "rgba(63, 58, 50, 0.28)",
-            strokeWidth: 1.1,
-            fill: "rgba(73, 69, 61, 0.13)",
-            fillStyle: "hachure",
-            hachureAngle: index % 2 ? 48 : -42,
-            hachureGap: 8,
-            roughness: 2,
-            bowing: 1.3,
-          }),
-        );
+    MAP_EDGES.forEach(([fromId, toId]) => {
+      const points = getMapEdgePoints(fromId, toId);
+      handPolyline(points, {
+        width: 5.2,
+        wobble: 2.8,
+        color: "rgba(56, 50, 44, 0.55)",
+        passes: 1,
+        alpha: 0.34,
       });
-
-      add(
-        roughSvg.rectangle(13, 12, 812, 364, {
-          seed: 720,
-          stroke: "rgba(53, 49, 42, 0.64)",
-          strokeWidth: 1.7,
-          roughness: 2.2,
-          bowing: 1.4,
-        }),
-      );
-
-      MAP_EDGES.forEach(([fromId, toId], index) => {
-        const from = MAP_NODE_LOOKUP[fromId];
-        const to = MAP_NODE_LOOKUP[toId];
-        add(
-          roughSvg.line(from.x, from.y, to.x, to.y, {
-            seed: 1000 + index,
-            stroke: "rgba(77, 70, 59, 0.26)",
-            strokeWidth: 8,
-            roughness: 2.6,
-            bowing: 1.8,
-          }),
-        );
-        add(
-          roughSvg.line(from.x, from.y, to.x, to.y, {
-            seed: 1200 + index,
-            stroke: "#49443b",
-            strokeWidth: 2.15,
-            roughness: 1.85,
-            bowing: 1.5,
-          }),
-        );
+      handPolyline(points, {
+        width: 2.7,
+        wobble: 2.2,
+        color: "#3c342d",
+        passes: 2,
       });
-
-      const highlightedNodes = MAP_NODES.filter((node) =>
-        ["key", "exit", "clue"].includes(node.type),
-      );
-      highlightedNodes.forEach((node, index) => {
-        add(
-          roughSvg.ellipse(node.x, node.y, node.type === "exit" ? 58 : 46, 35, {
-            seed: 1400 + index,
-            stroke: "rgba(151, 126, 20, 0.18)",
-            strokeWidth: 1,
-            fill: "rgba(231, 218, 40, 0.42)",
-            fillStyle: "solid",
-            roughness: 2.8,
-            bowing: 2,
-          }),
-        );
-      });
-
-      const key = MAP_NODE_LOOKUP.key;
-      add(
-        roughSvg.circle(key.x - 19, key.y - 20, 12, {
-          seed: 1501,
-          stroke: "#514a3f",
-          strokeWidth: 1.8,
-          roughness: 2,
-        }),
-      );
-      add(
-        roughSvg.line(key.x - 14, key.y - 15, key.x + 2, key.y + 1, {
-          seed: 1502,
-          stroke: "#514a3f",
-          strokeWidth: 1.8,
-          roughness: 2,
-        }),
-      );
-
-      const exit = MAP_NODE_LOOKUP.exit;
-      add(
-        roughSvg.rectangle(exit.x + 14, exit.y - 29, 23, 43, {
-          seed: 1510,
-          stroke: "#514a3f",
-          strokeWidth: 1.8,
-          roughness: 2.2,
-          bowing: 1.4,
-        }),
-      );
-      add(
-        roughSvg.circle(exit.x + 31, exit.y - 7, 3, {
-          seed: 1511,
-          stroke: "#514a3f",
-          fill: "#514a3f",
-          fillStyle: "solid",
-          roughness: 1.2,
-        }),
-      );
-
-      add(
-        roughSvg.line(73, 330, 130, 312, {
-          seed: 1530,
-          stroke: "#9b342c",
-          strokeWidth: 2,
-          roughness: 2.4,
-          bowing: 2,
-        }),
-      );
-      add(
-        roughSvg.line(130, 312, 118, 307, {
-          seed: 1531,
-          stroke: "#9b342c",
-          strokeWidth: 2,
-          roughness: 2.1,
-        }),
-      );
-      add(
-        roughSvg.line(130, 312, 121, 321, {
-          seed: 1532,
-          stroke: "#9b342c",
-          strokeWidth: 2,
-          roughness: 2.1,
-        }),
-      );
     });
 
-    return () => {
-      disposed = true;
-      layer.replaceChildren();
-    };
+    const highlightedNodeIds: MapNodeId[] = [
+      "turnClue",
+      "key",
+      "knockClue",
+      "exit",
+    ];
+    highlightedNodeIds.forEach((nodeId) => {
+      const node = MAP_NODE_LOOKUP[nodeId];
+      context.save();
+      context.globalCompositeOperation = "multiply";
+      context.fillStyle = "rgba(220, 217, 24, 0.62)";
+      context.beginPath();
+      context.ellipse(
+        node.x,
+        node.y,
+        nodeId === "exit" ? 48 : 37,
+        nodeId === "exit" ? 30 : 27,
+        rand(-0.35, 0.35),
+        0,
+        Math.PI * 2,
+      );
+      context.fill();
+      context.restore();
+    });
+
+    const tree = MAP_NODE_LOOKUP.middleEntry;
+    handLine(
+      { x: tree.x, y: tree.y + 10 },
+      { x: tree.x, y: tree.y - 18 },
+      { width: 3 },
+    );
+    handPolyline(
+      [
+        { x: tree.x - 16, y: tree.y - 4 },
+        { x: tree.x - 6, y: tree.y - 24 },
+        { x: tree.x + 4, y: tree.y - 8 },
+        { x: tree.x + 12, y: tree.y - 25 },
+        { x: tree.x + 19, y: tree.y - 5 },
+      ],
+      { width: 2.4 },
+    );
+
+    const shack = MAP_NODE_LOOKUP.northEntry;
+    handPolyline(
+      [
+        { x: shack.x - 25, y: shack.y + 8 },
+        { x: shack.x - 25, y: shack.y - 16 },
+        { x: shack.x + 20, y: shack.y - 16 },
+        { x: shack.x + 20, y: shack.y + 8 },
+        { x: shack.x - 25, y: shack.y + 8 },
+      ],
+      { width: 2.2 },
+    );
+    handPolyline(
+      [
+        { x: shack.x - 30, y: shack.y - 16 },
+        { x: shack.x - 3, y: shack.y - 30 },
+        { x: shack.x + 24, y: shack.y - 16 },
+      ],
+      { width: 2.2 },
+    );
+
+    const machinery = MAP_NODE_LOOKUP.turnClue;
+    handPolyline(
+      [
+        { x: machinery.x - 26, y: machinery.y + 8 },
+        { x: machinery.x + 10, y: machinery.y + 8 },
+        { x: machinery.x + 26, y: machinery.y - 4 },
+        { x: machinery.x + 26, y: machinery.y - 18 },
+        { x: machinery.x - 10, y: machinery.y - 18 },
+        { x: machinery.x - 26, y: machinery.y - 6 },
+        { x: machinery.x - 26, y: machinery.y + 8 },
+      ],
+      { width: 2.2 },
+    );
+
+    const tunnel = MAP_NODE_LOOKUP.northExit;
+    context.beginPath();
+    context.ellipse(tunnel.x, tunnel.y, 34, 18, 0.15, 0, Math.PI * 2);
+    context.strokeStyle = "#3c342d";
+    context.lineWidth = 2.4;
+    context.stroke();
+
+    const house = MAP_NODE_LOOKUP.middleHub;
+    handPolyline(
+      [
+        { x: house.x - 26, y: house.y + 20 },
+        { x: house.x - 26, y: house.y - 10 },
+        { x: house.x, y: house.y - 28 },
+        { x: house.x + 26, y: house.y - 10 },
+        { x: house.x + 26, y: house.y + 20 },
+        { x: house.x - 26, y: house.y + 20 },
+      ],
+      { width: 2.2 },
+    );
+
+    const silo = MAP_NODE_LOOKUP.southEntry;
+    for (let index = 0; index < 3; index += 1) {
+      context.beginPath();
+      context.ellipse(
+        silo.x - 22 + index * 22,
+        silo.y,
+        12,
+        22,
+        0.1,
+        0,
+        Math.PI * 2,
+      );
+      context.strokeStyle = "#3c342d";
+      context.lineWidth = 2;
+      context.stroke();
+    }
+
+    const columns = MAP_NODE_LOOKUP.middleExit;
+    for (let index = 0; index < 3; index += 1) {
+      handLine(
+        { x: columns.x - 14 + index * 13, y: columns.y - 18 },
+        { x: columns.x - 14 + index * 13, y: columns.y + 16 },
+        { width: 2.2 },
+      );
+    }
+
+    const rocks = MAP_NODE_LOOKUP.southStore;
+    handPolyline(
+      [
+        { x: rocks.x - 20, y: rocks.y + 10 },
+        { x: rocks.x - 24, y: rocks.y - 8 },
+        { x: rocks.x - 6, y: rocks.y - 18 },
+        { x: rocks.x + 10, y: rocks.y - 10 },
+        { x: rocks.x + 14, y: rocks.y + 12 },
+        { x: rocks.x - 20, y: rocks.y + 10 },
+      ],
+      { width: 2.2 },
+    );
+
+    const keyNode = MAP_NODE_LOOKUP.key;
+    context.beginPath();
+    context.arc(keyNode.x - 12, keyNode.y - 8, 10, 0, Math.PI * 2);
+    context.strokeStyle = "#3c342d";
+    context.lineWidth = 2.5;
+    context.stroke();
+    handLine(
+      { x: keyNode.x - 4, y: keyNode.y },
+      { x: keyNode.x + 22, y: keyNode.y + 20 },
+      { width: 2.8 },
+    );
+    handLine(
+      { x: keyNode.x + 11, y: keyNode.y + 12 },
+      { x: keyNode.x + 18, y: keyNode.y + 5 },
+      { width: 2.2 },
+    );
+
+    const wall = MAP_NODE_LOOKUP.knockClue;
+    handLine(
+      { x: wall.x - 12, y: wall.y + 18 },
+      { x: wall.x + 12, y: wall.y - 18 },
+      { width: 3 },
+    );
+    handLine(
+      { x: wall.x - 20, y: wall.y + 10 },
+      { x: wall.x + 4, y: wall.y - 22 },
+      { width: 2.5 },
+    );
+
+    const exitNode = MAP_NODE_LOOKUP.exit;
+    handPolyline(
+      [
+        { x: exitNode.x - 22, y: exitNode.y + 26 },
+        { x: exitNode.x - 22, y: exitNode.y - 30 },
+        { x: exitNode.x + 19, y: exitNode.y - 30 },
+        { x: exitNode.x + 19, y: exitNode.y + 26 },
+      ],
+      { width: 2.8 },
+    );
+    context.beginPath();
+    context.arc(exitNode.x + 10, exitNode.y, 3, 0, Math.PI * 2);
+    context.fillStyle = "#3c342d";
+    context.fill();
+
+    Object.values(MAP_NODE_LOOKUP).forEach((node) => {
+      context.beginPath();
+      context.arc(node.x + rand(-1, 1), node.y + rand(-1, 1), 7, 0, Math.PI * 2);
+      context.fillStyle = node.id === "start" ? "#8d2c2a" : "#23201c";
+      context.fill();
+    });
+
+    handText("1. 西側岔路", 268, 492, 23, -0.03);
+    handText("2. 中央走廊", 430, 578, 23, 0.01);
+    handText("3. 東側岔路", 675, 457, 22, -0.01);
+    handText("4. 機械室 ?", 274, 248, 23, -0.02);
+    handText("5. 中央機房", 510, 337, 22, 0.01);
+    handText("6. 廢棄倉庫", 835, 363, 22, 0.01);
+    handText("7. 銅鑰匙", 650, 292, 22, -0.02);
+    handText("8. 北側長廊", 452, 202, 22, -0.04);
+    handText("9. 直通走廊", 620, 215, 21, -0.03);
+    handText("10. 維修提示", 692, 112, 20, 0.02);
+    handText("逃生門", 852, 82, 24, -0.04, "#8d2c2a");
+    handText("you are here", 630, 598, 22, 0.03, "#8d2c2a");
+
+    handPolyline(
+      [
+        { x: 610, y: 586 },
+        { x: 575, y: 586 },
+        { x: 575, y: 602 },
+        { x: 562, y: 596 },
+      ],
+      { width: 2.4, color: "#8d2c2a" },
+    );
+    handText("GOOD LUCK", 210, 92, 28, -0.35);
+    handText("DON'T LOOK BACK", 680, 76, 23, -0.16);
+    handPolyline(
+      [
+        { x: 915, y: 545 },
+        { x: 1020, y: 398 },
+        { x: 985, y: 397 },
+      ],
+      { width: 2.5 },
+    );
+    handPolyline(
+      [
+        { x: 70, y: 86 },
+        { x: 36, y: 120 },
+        { x: 49, y: 122 },
+      ],
+      { width: 2.6 },
+    );
+
+    for (let index = 0; index < 8; index += 1) {
+      handLine(
+        { x: 915 + index * 8, y: 420 + index * 14 },
+        { x: 974 + index * 8, y: 469 + index * 14 },
+        { width: 1.8, wobble: 1.4 },
+      );
+    }
+    handLine(
+      { x: 910, y: 416 },
+      { x: 977, y: 570 },
+      { width: 2.2, wobble: 1.2 },
+    );
+    handLine(
+      { x: 930, y: 410 },
+      { x: 995, y: 564 },
+      { width: 2.2, wobble: 1.2 },
+    );
   }, []);
 
   useEffect(() => {
@@ -1141,13 +1446,16 @@ function PlanningScreen({
     if (!context) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = 840 * dpr;
-    canvas.height = 390 * dpr;
+    canvas.width = MAP_WIDTH * dpr;
+    canvas.height = MAP_HEIGHT * dpr;
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.clearRect(0, 0, 840, 390);
+    context.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
     context.globalCompositeOperation = "multiply";
 
-    const points = plannedNodeIds.map((id) => MAP_NODE_LOOKUP[id]);
+    const points = plannedNodeIds.flatMap((id, index) => {
+      if (index === 0) return [MAP_NODE_LOOKUP[id]];
+      return getMapEdgePoints(plannedNodeIds[index - 1], id).slice(1);
+    });
     const noise = (index: number, pass: number, axis: number) => {
       const raw =
         Math.sin(index * 12.9898 + pass * 71.731 + axis * 17.113 + 22.1) *
@@ -1192,8 +1500,17 @@ function PlanningScreen({
     };
 
     drawInkPass(9, 0.12, 0);
-    drawInkPass(4.2, 0.82, 1);
-    drawInkPass(1.25, 0.58, 2);
+    drawInkPass(3.6, 0.84, 1);
+    drawInkPass(1.2, 0.72, 2);
+
+    plannedNodeIds.slice(1).forEach((id) => {
+      const node = MAP_NODE_LOOKUP[id];
+      context.beginPath();
+      context.arc(node.x, node.y, 13, 0, Math.PI * 2);
+      context.strokeStyle = "rgba(166, 64, 52, 0.85)";
+      context.lineWidth = 2.1;
+      context.stroke();
+    });
 
     if (isDrawing && cursorPoint) {
       context.save();
@@ -1216,8 +1533,8 @@ function PlanningScreen({
     if (!stage) return null;
     const bounds = stage.getBoundingClientRect();
     return {
-      x: ((event.clientX - bounds.left) / bounds.width) * 840,
-      y: ((event.clientY - bounds.top) / bounds.height) * 390,
+      x: ((event.clientX - bounds.left) / bounds.width) * MAP_WIDTH,
+      y: ((event.clientY - bounds.top) / bounds.height) * MAP_HEIGHT,
     };
   };
 
@@ -1230,7 +1547,7 @@ function PlanningScreen({
         distance: Math.hypot(node.x - point.x, node.y - point.y),
       }))
       .sort((a, b) => a.distance - b.distance);
-    return candidates[0]?.distance <= 42 ? candidates[0].node : null;
+    return candidates[0]?.distance <= 55 ? candidates[0].node : null;
   };
 
   const beginStroke = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1238,10 +1555,10 @@ function PlanningScreen({
     if (!point) return;
     const start = MAP_NODE_LOOKUP.start;
     const startsOnMarker =
-      Math.hypot(point.x - start.x, point.y - start.y) <= 52;
+      Math.hypot(point.x - start.x, point.y - start.y) <= 78;
 
     if (!startsOnMarker) {
-      setStrokeMessage("請把筆尖移到 START，再按住開始");
+      setStrokeMessage("請從底部 YOU ARE HERE 附近開始");
       return;
     }
 
@@ -1251,7 +1568,7 @@ function PlanningScreen({
     onBeginStroke();
     setIsDrawing(true);
     setCursorPoint(point);
-    setStrokeMessage("不要放開，拖過相鄰的紅色節點");
+    setStrokeMessage("不要放開，沿著道路拖過黑色地標點");
   };
 
   const moveStroke = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1275,219 +1592,130 @@ function PlanningScreen({
     activePointerRef.current = null;
     setIsDrawing(false);
     setCursorPoint(null);
-    setStrokeMessage("已停筆；可以直接開始逃亡，或從 START 重新畫");
+    setStrokeMessage("已完成一筆路線；可以直接開始逃亡。");
   };
 
+  const routeNote =
+    routeError ||
+    (isDrawing
+      ? strokeMessage
+      : !isReady
+        ? "這是一張可辨識的連通道路網。請從底部「YOU ARE HERE」開始規劃。"
+        : safeRoute
+          ? "路線已經過鑰匙並抵達逃生門。可以現在開始逃亡。"
+          : reachedExit && !hasKey
+            ? "你畫到了逃生門，但路線沒有經過鑰匙；仍然可以開始。"
+            : hasKey
+              ? `你拿到了鑰匙，但路線停在「${finalLocation}」；仍然可以開始。`
+              : `路線停在「${finalLocation}」；何時停筆由你決定。`);
+
   return (
-    <div className="planning-layout">
-      <section className="map-panel">
-        <div className="panel-heading">
+    <div className="planning-layout notebook-reference-layout">
+      <section className="map-panel notebook-reference-panel">
+        <div className="notebook-reference-heading">
           <div>
-            <p className="kicker">倖存者筆記 · B1 地下層</p>
-            <h2>按住 START，一筆畫出逃亡路線</h2>
+            <p>ESCAPE NOTE MAP / 潦草筆記本地圖</p>
+            <h2>倖存者手繪的 B1 地下層</h2>
           </div>
-          <div className="map-legend">
-            <span><i className="legend-start" /> START</span>
-            <span><i className="legend-key" /> 鑰匙</span>
-            <span><i className="legend-exit" /> 門</span>
-            <span><i className="legend-clue" /> 牆面提示</span>
-          </div>
+          <span>
+            可讀的連通道路網
+            <br />
+            從底部 YOU ARE HERE 開始一筆畫
+          </span>
         </div>
 
-        <div
-          ref={stageRef}
-          className={`map-stage drawing-map notebook-map ${
-            isDrawing ? "is-drawing" : ""
-          }`}
-          onPointerDown={beginStroke}
-          onPointerMove={moveStroke}
-          onPointerUp={finishStroke}
-          onPointerCancel={finishStroke}
-          role="application"
-          aria-label="方格筆記本逃亡地圖。從 START 按住並拖過相鄰節點，放開完成一筆路線。"
-          tabIndex={0}
-        >
-          <div className="map-grid" aria-hidden="true" />
-          <canvas
-            ref={paperCanvasRef}
-            className="notebook-paper-canvas"
-            width="840"
-            height="390"
-            aria-hidden="true"
-          />
-          <div className="notebook-scribbles" aria-hidden="true">
-            <span>ESCAPE NOTE MAP / B1</span>
-            <span>別停下</span>
-            <span>有聲音？</span>
-            <span>門在這邊 →</span>
-          </div>
-          <svg
-            ref={roughSvgRef}
-            className="route-map"
-            viewBox="0 0 840 390"
-            preserveAspectRatio="none"
-            role="img"
-            aria-label="潦草畫在方格紙上的地下層道路網"
+        <div className="notebook-paper-wrap">
+          <div
+            ref={stageRef}
+            className={`map-stage drawing-map notebook-map reference-paper ${
+              isDrawing ? "is-drawing" : ""
+            }`}
+            onPointerDown={beginStroke}
+            onPointerMove={moveStroke}
+            onPointerUp={finishStroke}
+            onPointerCancel={finishStroke}
+            role="application"
+            aria-label="潦草筆記本逃亡地圖。從底部 YOU ARE HERE 按住，沿道路拖過相鄰地標點。"
+            tabIndex={0}
           >
-            <g ref={roughMapLayerRef} />
-          </svg>
-          <canvas
-            ref={routeCanvasRef}
-            className="notebook-route-canvas"
-            width="840"
-            height="390"
-            aria-hidden="true"
-          />
+            <canvas
+              ref={mapCanvasRef}
+              className="notebook-map-canvas"
+              width={MAP_WIDTH}
+              height={MAP_HEIGHT}
+              aria-label="手繪地下層道路與地標"
+            />
+            <canvas
+              ref={routeCanvasRef}
+              className="notebook-route-canvas"
+              width={MAP_WIDTH}
+              height={MAP_HEIGHT}
+              aria-hidden="true"
+            />
 
-          {MAP_NODES.map((node) => {
-            const selectedIndex = plannedNodeIds.indexOf(node.id);
-            const isSelected = selectedIndex >= 0;
-            const isCurrent = node.id === lastNodeId;
-            const canConnect =
-              node.id !== lastNodeId && areConnected(lastNodeId, node.id);
-            return (
-              <div
-                key={node.id}
-                className={`map-point point-${node.type} ${
-                  isSelected ? "selected" : ""
-                } ${isCurrent ? "current" : ""} ${
-                  canConnect ? "available" : ""
-                }`}
-                style={{
-                  left: `${(node.x / 840) * 100}%`,
-                  top: `${(node.y / 390) * 100}%`,
-                }}
-                aria-label={`${node.label}${
-                  isSelected ? `，路線第 ${selectedIndex + 1} 站` : ""
-                }`}
-                role="img"
-              >
-                <span>{node.id === "start" ? "START" : node.shortLabel}</span>
-                <small>{node.label}</small>
-              </div>
-            );
-          })}
+            {MAP_NODES.map((node) => {
+              const selectedIndex = plannedNodeIds.indexOf(node.id);
+              const isSelected = selectedIndex >= 0;
+              const isCurrent = node.id === lastNodeId;
+              const canConnect =
+                node.id !== lastNodeId && areConnected(lastNodeId, node.id);
+              return (
+                <span
+                  key={node.id}
+                  className={`map-hit-node point-${node.type} ${
+                    isSelected ? "selected" : ""
+                  } ${isCurrent ? "current" : ""} ${
+                    canConnect ? "available" : ""
+                  }`}
+                  style={{
+                    left: `${(node.x / MAP_WIDTH) * 100}%`,
+                    top: `${(node.y / MAP_HEIGHT) * 100}%`,
+                  }}
+                  aria-label={`${node.label}${
+                    isSelected ? `，路線第 ${selectedIndex + 1} 站` : ""
+                  }`}
+                  role="img"
+                />
+              );
+            })}
 
-          {plannedNodeIds.length === 1 && (
-            <div className="draw-hint">
-              <span>✎</span>
-              <b>按住藍色 START</b>
-              <small>不要放開，拖過相鄰的紅點</small>
+            <div className="notebook-note">
+              {routeNote}
             </div>
-          )}
-
-          <div className="map-callout key-callout">
-            <span>可選</span>
-            銅鑰匙
-          </div>
-          <div className="map-callout killer-callout">
-            <span>威脅</span>
-            殺手從西側逼近
-          </div>
-          <div className={`stroke-status ${isDrawing ? "active" : ""}`}>
-            <span>{isDrawing ? "●" : "○"}</span>
-            {routeError || strokeMessage}
-          </div>
-        </div>
-      </section>
-
-      <aside className="route-panel">
-        <div className="route-heading">
-          <p className="kicker">筆記本上的逃亡計畫</p>
-          <span>{Math.max(0, plannedNodeIds.length - 1)} 段筆跡</span>
-        </div>
-
-        <div className="drawing-instructions">
-          <div className={`instruction-step ${isReady ? "done" : "active"}`}>
-            <span>{isReady ? "✓" : "1"}</span>
-            <p><b>一筆畫出路線</b><small>必須從 START 按住開始</small></p>
-          </div>
-          <div className={`instruction-step optional ${hasKey ? "done" : ""}`}>
-            <span>{hasKey ? "✓" : "?"}</span>
-            <p><b>是否取得鑰匙</b><small>可以略過，但門會打不開</small></p>
-          </div>
-          <div className={`instruction-step optional ${reachedExit ? "done" : ""}`}>
-            <span>{reachedExit ? "✓" : "?"}</span>
-            <p><b>是否抵達逃生門</b><small>何時停筆完全由你決定</small></p>
           </div>
         </div>
 
-        <div className="route-sequence" aria-label="目前畫出的路線">
-          <span>筆跡經過順序</span>
-          <div>
-            {plannedNodeIds.map((id, index) => (
-              <span className="sequence-node" key={`${id}-${index}`}>
-                <b>{index + 1}</b>
-                {MAP_NODE_LOOKUP[id].shortLabel}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="route-edit-actions single">
+        <div className="notebook-controls">
           <button
+            className="notebook-control danger"
             type="button"
             onClick={onClear}
             disabled={plannedNodeIds.length <= 1}
           >
-            ↶ 清除，從 START 重新畫
+            清除路線
           </button>
+          <button
+            type="button"
+            className="notebook-control primary"
+            onClick={onStart}
+            disabled={!isReady}
+          >
+            開始逃亡
+          </button>
+          <span className="notebook-readout">
+            經過地標：{Math.max(0, plannedNodeIds.length - 1)}
+            　路線長度：{route.distanceMeters} m
+            　提示：{route.events.length} / 2
+          </span>
         </div>
 
-        <div className="route-summary">
-          <div>
-            <span>預估距離</span>
-            <b>{route.distanceMeters} m</b>
-          </div>
-          <div>
-            <span>經過可疑點</span>
-            <b>{route.events.length} / 2</b>
-          </div>
-          <div>
-            <span>預估奔跑</span>
-            <b>{(route.durationMs / 1000).toFixed(1)} 秒</b>
-          </div>
-        </div>
-
-        <div
-          className={`route-validation ${safeRoute ? "valid" : ""} ${
-            isReady && !safeRoute ? "risk" : ""
-          }`}
-        >
-          <span>{safeRoute ? "✓" : isReady ? "!" : "✎"}</span>
-          <p>
-            <b>
-              {!isReady
-                ? "還沒有設定路線"
-                : safeRoute
-                  ? "這條線有機會逃出去"
-                  : "可以出發，但計畫有風險"}
-            </b>
-            <small>
-              {routeError ||
-                (!isReady
-                  ? "從 START 按住，至少拖到一個相鄰節點。"
-                  : reachedExit && !hasKey
-                    ? "路線抵達門口，但沒有經過鑰匙。"
-                    : !reachedExit && hasKey
-                      ? `拿到了鑰匙，但筆跡停在「${finalLocation}」。`
-                      : !reachedExit
-                        ? `筆跡停在「${finalLocation}」，沒有抵達逃生門。`
-                        : "角色會完全按照你畫出的順序奔跑。")}
-            </small>
-          </p>
-        </div>
-
-        <button
-          type="button"
-          className="primary-button"
-          onClick={onStart}
-          disabled={!isReady}
-        >
-          <span>按照這條線開始逃亡</span>
-          <i>{isReady ? "隨時開始 · Enter ↵" : "先畫一段"}</i>
-        </button>
-      </aside>
+        <p className={`notebook-risk-line ${safeRoute ? "safe" : ""}`}>
+          <b>{safeRoute ? "路線完整" : isReady ? "可立即出發" : "尚未畫線"}</b>
+          <span>
+            鑰匙與逃生門不是開始條件；角色會完全按照這一筆路線奔跑。
+          </span>
+        </p>
+      </section>
     </div>
   );
 }
