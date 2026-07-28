@@ -17,11 +17,11 @@ export interface SceneTuning {
 }
 
 export const DEFAULT_SCENE_TUNING: SceneTuning = {
-  exposure: 1.14,
-  concrete: 1,
+  exposure: 1.8,
+  concrete: 1.55,
   ambient: 1.02,
-  flashlight: 18,
-  ceiling: 2.15,
+  flashlight: 27.5,
+  ceiling: 4,
   fog: 0.028,
   vignette: 0.48,
 };
