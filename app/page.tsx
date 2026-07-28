@@ -718,7 +718,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P2.2</p>
+            <p>PHASE P2.2.1</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -853,7 +853,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>筆記本一筆畫逃亡路線</span>
+        <span>Rough.js 潦草筆記本逃亡地圖</span>
         <p>
           {phase === "planning"
             ? "從 START 按住一筆畫 · 放開完成 · Esc 清除"
@@ -900,14 +900,314 @@ function PlanningScreen({
     "筆尖必須從藍色 START 開始",
   );
   const stageRef = useRef<HTMLDivElement>(null);
+  const paperCanvasRef = useRef<HTMLCanvasElement>(null);
+  const routeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const roughSvgRef = useRef<SVGSVGElement>(null);
+  const roughMapLayerRef = useRef<SVGGElement>(null);
   const activePointerRef = useRef<number | null>(null);
   const lastNodeId = plannedNodeIds.at(-1) ?? "start";
   const lastNode = MAP_NODE_LOOKUP[lastNodeId];
-  const routePoints = plannedNodeIds
-    .map((id) => `${MAP_NODE_LOOKUP[id].x},${MAP_NODE_LOOKUP[id].y}`)
-    .join(" ");
   const safeRoute = hasKey && reachedExit;
   const finalLocation = MAP_NODE_LOOKUP[lastNodeId].label;
+
+  useEffect(() => {
+    const canvas = paperCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = 840 * dpr;
+    canvas.height = 390 * dpr;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    context.clearRect(0, 0, 840, 390);
+
+    let paperSeed = 20260728;
+    const random = () => {
+      paperSeed = Math.imul(paperSeed ^ (paperSeed >>> 15), 1 | paperSeed);
+      paperSeed ^= paperSeed + Math.imul(paperSeed ^ (paperSeed >>> 7), 61 | paperSeed);
+      return ((paperSeed ^ (paperSeed >>> 14)) >>> 0) / 4294967296;
+    };
+
+    context.save();
+    context.globalCompositeOperation = "multiply";
+
+    const stains = [
+      [148, 86, 92, 32, -0.22],
+      [635, 302, 122, 44, 0.17],
+      [742, 108, 58, 26, -0.35],
+      [362, 236, 78, 21, 0.08],
+    ] as const;
+    for (const [x, y, radiusX, radiusY, rotation] of stains) {
+      const stain = context.createRadialGradient(x, y, 2, x, y, radiusX);
+      stain.addColorStop(0, "rgba(100, 70, 42, 0.075)");
+      stain.addColorStop(0.7, "rgba(100, 70, 42, 0.028)");
+      stain.addColorStop(1, "rgba(100, 70, 42, 0)");
+      context.save();
+      context.translate(x, y);
+      context.rotate(rotation);
+      context.scale(1, radiusY / radiusX);
+      context.fillStyle = stain;
+      context.beginPath();
+      context.arc(0, 0, radiusX, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    }
+
+    context.strokeStyle = "rgba(118, 75, 67, 0.18)";
+    context.lineWidth = 1.1;
+    context.beginPath();
+    context.moveTo(52, 0);
+    context.lineTo(54, 390);
+    context.stroke();
+
+    for (let index = 0; index < 360; index += 1) {
+      const x = random() * 840;
+      const y = random() * 390;
+      const length = 1 + random() * 3.5;
+      context.strokeStyle = `rgba(67, 54, 39, ${0.018 + random() * 0.03})`;
+      context.lineWidth = 0.45 + random() * 0.45;
+      context.beginPath();
+      context.moveTo(x, y);
+      context.lineTo(x + length, y + (random() - 0.5) * 1.5);
+      context.stroke();
+    }
+    context.restore();
+  }, []);
+
+  useEffect(() => {
+    const svg = roughSvgRef.current;
+    const layer = roughMapLayerRef.current;
+    if (!svg || !layer) return;
+    let disposed = false;
+
+    void import("roughjs").then(({ default: rough }) => {
+      if (disposed) return;
+      layer.replaceChildren();
+      const roughSvg = rough.svg(svg);
+
+      const add = (element: SVGGElement) => {
+        if (!disposed) layer.appendChild(element);
+      };
+
+      const blockedAreas: Array<Array<[number, number]>> = [
+        [[65, 45], [170, 43], [188, 112], [105, 135], [66, 103]],
+        [[250, 185], [335, 162], [355, 230], [312, 264], [230, 244]],
+        [[522, 245], [611, 226], [658, 266], [624, 338], [548, 330]],
+        [[710, 212], [816, 190], [825, 282], [756, 296]],
+      ];
+
+      blockedAreas.forEach((points, index) => {
+        add(
+          roughSvg.polygon(points, {
+            seed: 810 + index,
+            stroke: "rgba(63, 58, 50, 0.28)",
+            strokeWidth: 1.1,
+            fill: "rgba(73, 69, 61, 0.13)",
+            fillStyle: "hachure",
+            hachureAngle: index % 2 ? 48 : -42,
+            hachureGap: 8,
+            roughness: 2,
+            bowing: 1.3,
+          }),
+        );
+      });
+
+      add(
+        roughSvg.rectangle(13, 12, 812, 364, {
+          seed: 720,
+          stroke: "rgba(53, 49, 42, 0.64)",
+          strokeWidth: 1.7,
+          roughness: 2.2,
+          bowing: 1.4,
+        }),
+      );
+
+      MAP_EDGES.forEach(([fromId, toId], index) => {
+        const from = MAP_NODE_LOOKUP[fromId];
+        const to = MAP_NODE_LOOKUP[toId];
+        add(
+          roughSvg.line(from.x, from.y, to.x, to.y, {
+            seed: 1000 + index,
+            stroke: "rgba(77, 70, 59, 0.26)",
+            strokeWidth: 8,
+            roughness: 2.6,
+            bowing: 1.8,
+          }),
+        );
+        add(
+          roughSvg.line(from.x, from.y, to.x, to.y, {
+            seed: 1200 + index,
+            stroke: "#49443b",
+            strokeWidth: 2.15,
+            roughness: 1.85,
+            bowing: 1.5,
+          }),
+        );
+      });
+
+      const highlightedNodes = MAP_NODES.filter((node) =>
+        ["key", "exit", "clue"].includes(node.type),
+      );
+      highlightedNodes.forEach((node, index) => {
+        add(
+          roughSvg.ellipse(node.x, node.y, node.type === "exit" ? 58 : 46, 35, {
+            seed: 1400 + index,
+            stroke: "rgba(151, 126, 20, 0.18)",
+            strokeWidth: 1,
+            fill: "rgba(231, 218, 40, 0.42)",
+            fillStyle: "solid",
+            roughness: 2.8,
+            bowing: 2,
+          }),
+        );
+      });
+
+      const key = MAP_NODE_LOOKUP.key;
+      add(
+        roughSvg.circle(key.x - 19, key.y - 20, 12, {
+          seed: 1501,
+          stroke: "#514a3f",
+          strokeWidth: 1.8,
+          roughness: 2,
+        }),
+      );
+      add(
+        roughSvg.line(key.x - 14, key.y - 15, key.x + 2, key.y + 1, {
+          seed: 1502,
+          stroke: "#514a3f",
+          strokeWidth: 1.8,
+          roughness: 2,
+        }),
+      );
+
+      const exit = MAP_NODE_LOOKUP.exit;
+      add(
+        roughSvg.rectangle(exit.x + 14, exit.y - 29, 23, 43, {
+          seed: 1510,
+          stroke: "#514a3f",
+          strokeWidth: 1.8,
+          roughness: 2.2,
+          bowing: 1.4,
+        }),
+      );
+      add(
+        roughSvg.circle(exit.x + 31, exit.y - 7, 3, {
+          seed: 1511,
+          stroke: "#514a3f",
+          fill: "#514a3f",
+          fillStyle: "solid",
+          roughness: 1.2,
+        }),
+      );
+
+      add(
+        roughSvg.line(73, 330, 130, 312, {
+          seed: 1530,
+          stroke: "#9b342c",
+          strokeWidth: 2,
+          roughness: 2.4,
+          bowing: 2,
+        }),
+      );
+      add(
+        roughSvg.line(130, 312, 118, 307, {
+          seed: 1531,
+          stroke: "#9b342c",
+          strokeWidth: 2,
+          roughness: 2.1,
+        }),
+      );
+      add(
+        roughSvg.line(130, 312, 121, 321, {
+          seed: 1532,
+          stroke: "#9b342c",
+          strokeWidth: 2,
+          roughness: 2.1,
+        }),
+      );
+    });
+
+    return () => {
+      disposed = true;
+      layer.replaceChildren();
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = routeCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = 840 * dpr;
+    canvas.height = 390 * dpr;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    context.clearRect(0, 0, 840, 390);
+    context.globalCompositeOperation = "multiply";
+
+    const points = plannedNodeIds.map((id) => MAP_NODE_LOOKUP[id]);
+    const noise = (index: number, pass: number, axis: number) => {
+      const raw =
+        Math.sin(index * 12.9898 + pass * 71.731 + axis * 17.113 + 22.1) *
+        43758.5453;
+      return ((raw - Math.floor(raw)) * 2 - 1) * 1.45;
+    };
+
+    const drawInkPass = (width: number, alpha: number, pass: number) => {
+      if (points.length < 2) return;
+      context.save();
+      context.strokeStyle = `rgba(160, 49, 41, ${alpha})`;
+      context.lineWidth = width;
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.beginPath();
+      context.moveTo(
+        points[0].x + noise(0, pass, 0),
+        points[0].y + noise(0, pass, 1),
+      );
+
+      points.slice(1).forEach((point, segmentIndex) => {
+        const from = points[segmentIndex];
+        const steps = Math.max(
+          4,
+          Math.round(Math.hypot(point.x - from.x, point.y - from.y) / 22),
+        );
+        for (let step = 1; step <= steps; step += 1) {
+          const progress = step / steps;
+          const noiseIndex = segmentIndex * 19 + step;
+          context.lineTo(
+            from.x +
+              (point.x - from.x) * progress +
+              noise(noiseIndex, pass, 0),
+            from.y +
+              (point.y - from.y) * progress +
+              noise(noiseIndex, pass, 1),
+          );
+        }
+      });
+      context.stroke();
+      context.restore();
+    };
+
+    drawInkPass(9, 0.12, 0);
+    drawInkPass(4.2, 0.82, 1);
+    drawInkPass(1.25, 0.58, 2);
+
+    if (isDrawing && cursorPoint) {
+      context.save();
+      context.strokeStyle = "rgba(160, 49, 41, 0.62)";
+      context.lineWidth = 2.5;
+      context.setLineDash([8, 7]);
+      context.lineCap = "round";
+      context.beginPath();
+      context.moveTo(lastNode.x, lastNode.y);
+      context.lineTo(cursorPoint.x, cursorPoint.y);
+      context.stroke();
+      context.restore();
+    }
+  }, [cursorPoint, isDrawing, lastNode.x, lastNode.y, plannedNodeIds]);
 
   const pointFromPointer = (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -1008,66 +1308,36 @@ function PlanningScreen({
           tabIndex={0}
         >
           <div className="map-grid" aria-hidden="true" />
+          <canvas
+            ref={paperCanvasRef}
+            className="notebook-paper-canvas"
+            width="840"
+            height="390"
+            aria-hidden="true"
+          />
           <div className="notebook-scribbles" aria-hidden="true">
+            <span>ESCAPE NOTE MAP / B1</span>
             <span>別停下</span>
             <span>有聲音？</span>
             <span>門在這邊 →</span>
           </div>
           <svg
+            ref={roughSvgRef}
             className="route-map"
             viewBox="0 0 840 390"
             preserveAspectRatio="none"
             role="img"
             aria-label="潦草畫在方格紙上的地下層道路網"
           >
-            <defs>
-              <filter id="pencil-wobble" x="-10%" y="-10%" width="120%" height="120%">
-                <feTurbulence
-                  type="fractalNoise"
-                  baseFrequency="0.018"
-                  numOctaves="2"
-                  seed="7"
-                  result="noise"
-                />
-                <feDisplacementMap
-                  in="SourceGraphic"
-                  in2="noise"
-                  scale="3.2"
-                />
-              </filter>
-            </defs>
-            <g filter="url(#pencil-wobble)">
-              {MAP_EDGES.map(([fromId, toId]) => {
-                const from = MAP_NODE_LOOKUP[fromId];
-                const to = MAP_NODE_LOOKUP[toId];
-                return (
-                  <line
-                    key={`${fromId}-${toId}`}
-                    className="map-corridor"
-                    x1={from.x}
-                    y1={from.y}
-                    x2={to.x}
-                    y2={to.y}
-                  />
-                );
-              })}
-            </g>
-            {plannedNodeIds.length > 1 && (
-              <>
-                <polyline className="drawn-route-shadow" points={routePoints} />
-                <polyline className="drawn-route" points={routePoints} />
-              </>
-            )}
-            {isDrawing && cursorPoint && (
-              <line
-                className="drawn-route-live"
-                x1={lastNode.x}
-                y1={lastNode.y}
-                x2={cursorPoint.x}
-                y2={cursorPoint.y}
-              />
-            )}
+            <g ref={roughMapLayerRef} />
           </svg>
+          <canvas
+            ref={routeCanvasRef}
+            className="notebook-route-canvas"
+            width="840"
+            height="390"
+            aria-hidden="true"
+          />
 
           {MAP_NODES.map((node) => {
             const selectedIndex = plannedNodeIds.indexOf(node.id);
