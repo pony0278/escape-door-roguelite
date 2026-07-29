@@ -11,6 +11,7 @@ import {
 } from "react";
 import RunnerScene3D, {
   DEFAULT_SCENE_TUNING,
+  type RouteNodeSceneKind,
   type SceneTuning,
 } from "./RunnerScene3D";
 
@@ -134,6 +135,39 @@ const MAP_EDGES: Array<readonly [MapNodeId, MapNodeId]> = [
 const MAP_NODE_LOOKUP = Object.fromEntries(
   MAP_NODES.map((node) => [node.id, node]),
 ) as Record<MapNodeId, MapNode>;
+
+function getRouteNodeSceneKind(nodeId: MapNodeId): RouteNodeSceneKind {
+  switch (nodeId) {
+    case "northEntry":
+    case "southEntry":
+      return "junction";
+    case "turnClue":
+      return "clue-turn";
+    case "middleHub":
+      return "machine";
+    case "southStore":
+      return "warehouse";
+    case "key":
+      return "key";
+    case "knockClue":
+      return "clue-knock";
+    case "exit":
+      return "exit";
+    default:
+      return "corridor";
+  }
+}
+
+const ROUTE_NODE_SCENE_DESCRIPTIONS: Record<RouteNodeSceneKind, string> = {
+  junction: "岔路標記與側向通道即將出現",
+  corridor: "進入狹長的地下水泥通道",
+  machine: "大型管線與運轉機具就在前方",
+  warehouse: "廢棄貨架與散落木箱擋住視線",
+  key: "微弱黃光照著一座物資台",
+  "clue-turn": "齒輪與閥門旁藏著牆面提示",
+  "clue-knock": "維修門上的紅色塗鴉逐漸清晰",
+  exit: "綠色逃生燈標出了最後一扇門",
+};
 
 const MAP_WIDTH = 1100;
 const MAP_HEIGHT = 700;
@@ -762,7 +796,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P2.3</p>
+            <p>PHASE P2.4</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -897,7 +931,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>筆記本路線 · 後視追逐校正版</span>
+        <span>筆記本路線 · 路線與節點場景同步</span>
         <p>
           {phase === "planning"
             ? "從 START 按住一筆畫 · 放開完成 · Esc 清除"
@@ -1788,13 +1822,21 @@ function RunningScreen({
     route.nodeIds[segmentIndex + 1] ?? route.nodeIds.at(-1) ?? segmentFromId;
   const segmentFrom = MAP_NODE_LOOKUP[segmentFromId];
   const segmentTo = MAP_NODE_LOOKUP[segmentToId];
-  const verticalDelta = segmentTo.y - segmentFrom.y;
+  const segmentLocalProgress = Math.max(
+    0,
+    Math.min(1, segmentProgress - segmentIndex),
+  );
+  const horizontalDelta = segmentTo.x - segmentFrom.x;
   const turnValue =
-    Math.abs(verticalDelta) < 36 ? 0 : verticalDelta < 0 ? -1 : 1;
+    Math.abs(horizontalDelta) < 55 ? 0 : horizontalDelta < 0 ? -1 : 1;
   const turnClass =
     turnValue < 0 ? "turn-left" : turnValue > 0 ? "turn-right" : "turn-straight";
   const turnLabel =
     turnValue < 0 ? "前方左轉" : turnValue > 0 ? "前方右轉" : "保持直行";
+  const nodeSceneKind = getRouteNodeSceneKind(segmentToId);
+  const nodeSceneDescription = ROUTE_NODE_SCENE_DESCRIPTIONS[nodeSceneKind];
+  const arrivalVisible = segmentLocalProgress >= 0.64;
+  const turningNow = turnValue !== 0 && segmentLocalProgress >= 0.56;
   const routePressure = Math.min(
     1,
     Math.max(0, (route.durationMs - 7600) / 6900),
@@ -1814,6 +1856,7 @@ function RunningScreen({
     "--progress": progress,
     "--monster-pressure": monsterPressure,
     "--route-turn": turnValue,
+    "--segment-progress": segmentLocalProgress,
     "--corridor-vignette": tuning.vignette,
   } as CSSProperties;
 
@@ -1843,7 +1886,7 @@ function RunningScreen({
       <div
         className={`chase-stage runner-3d-stage ${turnClass} chase-${chaseState} ${
           lookBack ? "lookback-active" : ""
-        } ${paused ? "is-paused" : ""}`}
+        } ${paused ? "is-paused" : ""} ${turningNow ? "turning-now" : ""}`}
         style={stageStyle}
         aria-label={`${lookBack ? "回頭查看追兵" : "第三人稱追逐演出"}，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
       >
@@ -1853,6 +1896,9 @@ function RunningScreen({
           monsterPressure={monsterPressure}
           monsterDistance={monsterDistance}
           lookBack={lookBack}
+          segmentProgress={segmentLocalProgress}
+          nodeSceneKind={nodeSceneKind}
+          nodeLabel={segmentTo.label}
           clueActive={Boolean(activeClue)}
           clueKind={activeClue?.id ?? null}
           clueText={activeClue?.value ?? ""}
@@ -1953,14 +1999,33 @@ function RunningScreen({
         </div>
 
         <div className="chase-cinematic-label" aria-hidden="true">
-          <span>{lookBack ? "回頭確認" : "路線執行中"}</span>
+          <span>
+            {lookBack
+              ? "回頭確認"
+              : arrivalVisible
+                ? "節點接近"
+                : "路線執行中"}
+          </span>
           <b>
             {lookBack
               ? "牠還在後面"
               : chaseState === "close"
                 ? "不要回頭"
-                : turnLabel}
+                : arrivalVisible
+                  ? segmentTo.label
+                  : turnLabel}
           </b>
+        </div>
+
+        <div
+          className={`node-arrival-card node-kind-${nodeSceneKind} ${
+            arrivalVisible && !lookBack ? "visible" : ""
+          }`}
+          aria-live="polite"
+        >
+          <span>ROUTE NODE · {currentNodeNumber}</span>
+          <b>{segmentTo.label}</b>
+          <small>{nodeSceneDescription}</small>
         </div>
 
         {activeClue && (
