@@ -4605,6 +4605,85 @@ button:focus-visible {
   transition: none;
 }
 
+/* P2.4 · route turns and destination scene synchronization */
+.node-arrival-card {
+  position: absolute;
+  z-index: 45;
+  top: 108px;
+  left: 50%;
+  display: grid;
+  min-width: min(310px, calc(100% - 220px));
+  max-width: 390px;
+  padding: 10px 18px 12px;
+  justify-items: center;
+  border: 1px solid rgba(198, 193, 169, 0.42);
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(8, 12, 10, 0.52), rgba(8, 12, 10, 0.94), rgba(8, 12, 10, 0.52));
+  box-shadow:
+    0 14px 38px rgba(0, 0, 0, 0.36),
+    inset 0 1px rgba(240, 235, 211, 0.05);
+  color: #efecdc;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -9px);
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease,
+    border-color 0.22s ease;
+  backdrop-filter: blur(8px);
+}
+
+.node-arrival-card.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.node-arrival-card > span {
+  color: #aaa993;
+  font: 800 7px/1 var(--font-mono);
+  letter-spacing: 0.19em;
+}
+
+.node-arrival-card > b {
+  margin-top: 4px;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+}
+
+.node-arrival-card > small {
+  margin-top: 3px;
+  color: #bfc5bc;
+  font: 700 9px/1.35 var(--font-mono);
+  letter-spacing: 0.035em;
+}
+
+.node-arrival-card.node-kind-key {
+  border-color: rgba(216, 181, 86, 0.72);
+}
+
+.node-arrival-card.node-kind-exit {
+  border-color: rgba(190, 216, 121, 0.76);
+}
+
+.node-arrival-card.node-kind-clue-turn,
+.node-arrival-card.node-kind-clue-knock {
+  border-color: rgba(195, 76, 67, 0.72);
+}
+
+.runner-3d-stage.turning-now {
+  border-color: rgba(211, 197, 151, 0.68);
+}
+
+.runner-3d-stage.turning-now .route-camera-hud small {
+  color: #e1ce8c;
+}
+
+.runner-3d-stage.is-paused .node-arrival-card {
+  opacity: 0.18;
+}
+
 @media (max-width: 720px) {
   .scene-tuning-panel {
     top: 10px;
@@ -4624,6 +4703,20 @@ button:focus-visible {
 
   .run-paused-overlay > small {
     max-width: 240px;
+  }
+
+  .node-arrival-card {
+    top: 116px;
+    min-width: min(240px, calc(100% - 80px));
+    padding: 8px 12px 9px;
+  }
+
+  .node-arrival-card > b {
+    font-size: 15px;
+  }
+
+  .node-arrival-card > small {
+    font-size: 8px;
   }
 }
 
