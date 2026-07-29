@@ -796,7 +796,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P2.4</p>
+            <p>PHASE P2.4.1</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -931,7 +931,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>筆記本路線 · 路線與節點場景同步</span>
+        <span>筆記本路線 · 轉角拓撲與防穿牆鏡頭</span>
         <p>
           {phase === "planning"
             ? "從 START 按住一筆畫 · 放開完成 · Esc 清除"
@@ -1826,9 +1826,25 @@ function RunningScreen({
     0,
     Math.min(1, segmentProgress - segmentIndex),
   );
-  const horizontalDelta = segmentTo.x - segmentFrom.x;
+  const segmentNextId = route.nodeIds[segmentIndex + 2];
+  const segmentNext = segmentNextId
+    ? MAP_NODE_LOOKUP[segmentNextId]
+    : null;
+  const incomingX = segmentTo.x - segmentFrom.x;
+  const incomingY = segmentTo.y - segmentFrom.y;
+  const outgoingX = segmentNext ? segmentNext.x - segmentTo.x : 0;
+  const outgoingY = segmentNext ? segmentNext.y - segmentTo.y : 0;
+  const cross = incomingX * outgoingY - incomingY * outgoingX;
+  const turnStrength = segmentNext
+    ? cross /
+      Math.max(
+        1,
+        Math.hypot(incomingX, incomingY) *
+          Math.hypot(outgoingX, outgoingY),
+      )
+    : 0;
   const turnValue =
-    Math.abs(horizontalDelta) < 55 ? 0 : horizontalDelta < 0 ? -1 : 1;
+    Math.abs(turnStrength) < 0.12 ? 0 : turnStrength > 0 ? 1 : -1;
   const turnClass =
     turnValue < 0 ? "turn-left" : turnValue > 0 ? "turn-right" : "turn-straight";
   const turnLabel =
