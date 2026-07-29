@@ -3960,6 +3960,78 @@ button:focus-visible {
   outline: none;
 }
 
+.runner-rear-mirror-frame {
+  position: absolute;
+  z-index: 5;
+  top: 1.6%;
+  right: 1.6%;
+  width: 26%;
+  aspect-ratio: 1 / 0.58;
+  overflow: hidden;
+  border: 3px solid rgba(145, 159, 153, 0.72);
+  border-radius: 7px;
+  box-shadow:
+    0 0 0 5px rgba(4, 8, 7, 0.72),
+    0 12px 30px rgba(0, 0, 0, 0.4),
+    inset 0 0 22px rgba(0, 0, 0, 0.34);
+  color: #eef1e7;
+  pointer-events: none;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.runner-rear-mirror-frame.hidden {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.runner-rear-mirror-frame b,
+.runner-rear-mirror-frame small {
+  position: absolute;
+  top: 8px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(4, 7, 6, 0.72);
+  font-family: var(--font-mono);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(7px);
+}
+
+.runner-rear-mirror-frame b {
+  left: 8px;
+  font-size: 9px;
+}
+
+.runner-rear-mirror-frame small {
+  right: 8px;
+  color: #cf4e43;
+  font-size: 7px;
+}
+
+.runner-lookback-vignette {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 52%, transparent 34%, rgba(2, 5, 4, 0.42) 100%),
+    linear-gradient(
+      90deg,
+      rgba(144, 33, 27, 0.09),
+      transparent 17% 83%,
+      rgba(144, 33, 27, 0.09)
+    );
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.runner-lookback-vignette.visible {
+  opacity: 1;
+}
+
 .runner-3d-status {
   position: absolute;
   z-index: 2;
@@ -4018,11 +4090,133 @@ button:focus-visible {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72);
 }
 
+.runner-3d-stage.lookback-active .chase-cinematic-label {
+  top: 18%;
+}
+
 .runner-3d-stage .route-camera-hud,
 .runner-3d-stage .chase-distance-hud {
   border-color: rgba(136, 145, 139, 0.34);
   background: rgba(3, 6, 5, 0.82);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+
+.runner-3d-stage .route-camera-hud {
+  top: auto;
+  bottom: 72px;
+  left: 18px;
+}
+
+.runner-3d-stage .chase-distance-hud {
+  top: 220px;
+}
+
+.runner-3d-stage .scene-tuning-panel {
+  right: auto;
+  left: 18px;
+}
+
+.runner-3d-stage .scene-tuning-panel summary {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+.runner-3d-stage .scene-tuning-body {
+  border-radius: 0 8px 8px 8px;
+}
+
+.look-back-button {
+  position: absolute;
+  z-index: 50;
+  right: 24px;
+  bottom: 72px;
+  display: grid;
+  min-width: 126px;
+  min-height: 44px;
+  padding: 7px 11px;
+  grid-template-columns: 24px auto 18px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(207, 213, 204, 0.48);
+  border-radius: 8px;
+  background: rgba(7, 11, 9, 0.86);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.34);
+  color: #edf0e9;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  touch-action: none;
+  backdrop-filter: blur(10px);
+}
+
+.look-back-button:hover,
+.look-back-button:focus-visible,
+.look-back-button.active {
+  border-color: rgba(214, 196, 142, 0.82);
+  background: rgba(48, 39, 23, 0.94);
+  outline: none;
+}
+
+.look-back-button > span {
+  color: #d8ceaa;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.look-back-button > b {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.look-back-button > small {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(184, 193, 185, 0.36);
+  border-radius: 4px;
+  color: #9aa69f;
+  font-size: 8px;
+}
+
+.look-back-status {
+  position: absolute;
+  z-index: 46;
+  top: 16px;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  min-width: 230px;
+  padding: 9px 15px;
+  border: 1px solid rgba(176, 187, 178, 0.4);
+  border-radius: 999px;
+  background: rgba(4, 7, 6, 0.8);
+  color: #f1eee0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -8px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+  backdrop-filter: blur(9px);
+}
+
+.look-back-status.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.look-back-status span,
+.look-back-status small {
+  color: #aebbb3;
+  font: 700 7px/1.25 var(--font-mono);
+  letter-spacing: 0.13em;
+}
+
+.look-back-status b {
+  margin: 2px 0;
+  color: #e4dbc0;
+  font: 800 11px/1.2 var(--font-mono);
+  letter-spacing: 0.06em;
 }
 
 .runner-3d-stage .route-camera-hud span,
@@ -4095,8 +4289,47 @@ button:focus-visible {
     height: 490px;
   }
 
+  .runner-rear-mirror-frame {
+    top: 10px;
+    right: 10px;
+    width: 37%;
+    border-width: 2px;
+  }
+
   .runner-3d-stage .chase-cinematic-label {
     top: 18%;
+  }
+
+  .runner-3d-stage.lookback-active .chase-cinematic-label {
+    top: 24%;
+  }
+
+  .runner-3d-stage .scene-tuning-panel {
+    top: 10px;
+    right: auto;
+    left: 10px;
+  }
+
+  .runner-3d-stage .chase-distance-hud {
+    top: 108px;
+    right: 10px;
+  }
+
+  .runner-3d-stage .route-camera-hud {
+    bottom: 68px;
+    left: 10px;
+    min-width: 126px;
+  }
+
+  .look-back-button {
+    right: 10px;
+    bottom: 68px;
+    min-width: 118px;
+  }
+
+  .look-back-status {
+    top: 62px;
+    min-width: 206px;
   }
 
   .runner-3d-stage .clue-target {
