@@ -762,7 +762,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P2.2.1</p>
+            <p>PHASE P2.3</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -897,7 +897,7 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>潦草筆記本地圖 · 範本校正版</span>
+        <span>筆記本路線 · 後視追逐校正版</span>
         <p>
           {phase === "planning"
             ? "從 START 按住一筆畫 · 放開完成 · Esc 清除"
@@ -1745,6 +1745,38 @@ function RunningScreen({
   onTuningChange: (next: SceneTuning) => void;
   onResetTuning: () => void;
 }) {
+  const [lookBack, setLookBack] = useState(false);
+
+  useEffect(() => {
+    const startLookBack = (event: KeyboardEvent) => {
+      if (event.code !== "KeyB" || event.repeat) return;
+      event.preventDefault();
+      setLookBack(true);
+    };
+    const stopLookBack = (event: KeyboardEvent) => {
+      if (event.code !== "KeyB") return;
+      event.preventDefault();
+      setLookBack(false);
+    };
+    const clearLookBack = () => setLookBack(false);
+
+    window.addEventListener("keydown", startLookBack);
+    window.addEventListener("keyup", stopLookBack);
+    window.addEventListener("blur", clearLookBack);
+    return () => {
+      window.removeEventListener("keydown", startLookBack);
+      window.removeEventListener("keyup", stopLookBack);
+      window.removeEventListener("blur", clearLookBack);
+    };
+  }, []);
+
+  const beginLookBack = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setLookBack(true);
+  };
+  const endLookBack = () => setLookBack(false);
+
   const segmentCount = Math.max(1, route.nodeIds.length - 1);
   const segmentProgress = Math.min(
     segmentCount - 0.0001,
@@ -1775,12 +1807,7 @@ function RunningScreen({
     3,
     Math.round(23 - progress * (12 + routePressure * 8)),
   );
-  const chaseState =
-    progress < 0.11
-      ? "lookback"
-      : monsterDistance <= 7
-        ? "close"
-        : "tracking";
+  const chaseState = monsterDistance <= 7 ? "close" : "tracking";
   const currentNodeNumber = Math.min(segmentIndex + 2, route.nodeIds.length);
 
   const stageStyle = {
@@ -1815,16 +1842,17 @@ function RunningScreen({
 
       <div
         className={`chase-stage runner-3d-stage ${turnClass} chase-${chaseState} ${
-          paused ? "is-paused" : ""
-        }`}
+          lookBack ? "lookback-active" : ""
+        } ${paused ? "is-paused" : ""}`}
         style={stageStyle}
-        aria-label={`第三人稱追逐演出，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
+        aria-label={`${lookBack ? "回頭查看追兵" : "第三人稱追逐演出"}，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
       >
         <RunnerScene3D
           progress={progress}
           turn={turnValue}
           monsterPressure={monsterPressure}
           monsterDistance={monsterDistance}
+          lookBack={lookBack}
           clueActive={Boolean(activeClue)}
           clueKind={activeClue?.id ?? null}
           clueText={activeClue?.value ?? ""}
@@ -1842,6 +1870,21 @@ function RunningScreen({
           <span aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span>
           <b>{paused ? "繼續奔跑" : "暫停"}</b>
           <small>P</small>
+        </button>
+
+        <button
+          type="button"
+          className={`look-back-button ${lookBack ? "active" : ""}`}
+          onPointerDown={beginLookBack}
+          onPointerUp={endLookBack}
+          onPointerCancel={endLookBack}
+          onLostPointerCapture={endLookBack}
+          aria-pressed={lookBack}
+          aria-label="按住回頭查看怪物"
+        >
+          <span aria-hidden="true">👁</span>
+          <b>{lookBack ? "正在回頭" : "按住回頭"}</b>
+          <small>B</small>
         </button>
 
         <details
@@ -1900,11 +1943,20 @@ function RunningScreen({
           </div>
         )}
 
+        <div
+          className={`look-back-status ${lookBack ? "visible" : ""}`}
+          role="status"
+        >
+          <span>LOOKING BACK</span>
+          <b>怪物距離 {monsterDistance}m</b>
+          <small>放開 B 或按鈕回到奔跑視角</small>
+        </div>
+
         <div className="chase-cinematic-label" aria-hidden="true">
-          <span>{chaseState === "lookback" ? "回頭確認" : "路線執行中"}</span>
+          <span>{lookBack ? "回頭確認" : "路線執行中"}</span>
           <b>
-            {chaseState === "lookback"
-              ? "牠追上來了"
+            {lookBack
+              ? "牠還在後面"
               : chaseState === "close"
                 ? "不要回頭"
                 : turnLabel}
@@ -1967,7 +2019,7 @@ function RunningScreen({
         <p>
           {activeClue
             ? "點擊畫面中的提示，或按 Space 聚焦。"
-            : "提示藏在環境中；成功聚焦後，內容只會短暫停留。"}
+            : "右上角後視鏡會持續顯示威脅；按住 B 或眼睛按鈕可回頭看清怪物。"}
         </p>
       </div>
     </div>
