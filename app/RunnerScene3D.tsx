@@ -56,6 +56,12 @@ const CHUNK_LENGTH = 18;
 const CHUNK_COUNT = 7;
 const RUN_SPEED = 12.5;
 const CORRIDOR_HALF_WIDTH = 6.1;
+const TURN_RUN_LENGTH = 52;
+const TURN_PATH_START = 32;
+const TURN_RADIUS = 6;
+const TURN_NODE_DISTANCE = 40;
+const CAMERA_TRAIL_DISTANCE = 8.6;
+const CAMERA_MIN_DISTANCE = 1.8;
 
 function makeConcreteTexture(
   renderer: THREE.WebGLRenderer,
@@ -593,66 +599,156 @@ export default function RunnerScene3D({
       createCorridorChunk(index);
     }
 
-    const turnSetPiece = new THREE.Group();
-    turnSetPiece.visible = false;
-    scene.add(turnSetPiece);
+    const turnRig = new THREE.Group();
+    turnRig.visible = false;
+    scene.add(turnRig);
+    const turnCameraOccluders: THREE.Mesh[] = [];
 
-    const turnBulkhead = new THREE.Group();
-    turnSetPiece.add(turnBulkhead);
-    addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 6.15, 0.48),
-      wallMaterial,
-      turnBulkhead,
-      [0, 3.03, -0.25],
-    );
-    addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2 - 0.5, 2.1, 0.04),
-      tileMaterial,
-      turnBulkhead,
-      [0, 1.05, 0.01],
-    );
-    addMesh(
-      new THREE.BoxGeometry(4.6, 0.16, 0.22),
-      toon(0x9f9a78),
-      turnBulkhead,
-      [0, 5.32, 0.1],
-    );
+    const addTurnWall = (
+      geometry: THREE.BufferGeometry,
+      position: [number, number, number],
+    ) => {
+      const wall = addMesh(
+        geometry,
+        wallMaterial,
+        turnRig,
+        position,
+      );
+      turnCameraOccluders.push(wall);
+      return wall;
+    };
 
-    const branchCorridor = new THREE.Group();
-    turnSetPiece.add(branchCorridor);
     addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 0.34, 30),
+      new THREE.BoxGeometry(
+        CORRIDOR_HALF_WIDTH * 2,
+        0.34,
+        TURN_RUN_LENGTH,
+      ),
       floorMaterial,
-      branchCorridor,
-      [0, -0.17, -14.5],
+      turnRig,
+      [0, -0.17, TURN_RUN_LENGTH / 2],
     );
     addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 0.38, 30),
+      new THREE.BoxGeometry(
+        CORRIDOR_HALF_WIDTH * 2,
+        0.38,
+        TURN_RUN_LENGTH,
+      ),
       ceilingMaterial,
-      branchCorridor,
-      [0, 6.12, -14.5],
+      turnRig,
+      [0, 6.12, TURN_RUN_LENGTH / 2],
+    );
+    addMesh(
+      new THREE.BoxGeometry(
+        TURN_RUN_LENGTH,
+        0.34,
+        CORRIDOR_HALF_WIDTH * 2,
+      ),
+      floorMaterial,
+      turnRig,
+      [TURN_RUN_LENGTH / 2, -0.17, 0],
+    );
+    addMesh(
+      new THREE.BoxGeometry(
+        TURN_RUN_LENGTH,
+        0.38,
+        CORRIDOR_HALF_WIDTH * 2,
+      ),
+      ceilingMaterial,
+      turnRig,
+      [TURN_RUN_LENGTH / 2, 6.12, 0],
+    );
+
+    addTurnWall(
+      new THREE.BoxGeometry(0.5, 6.2, TURN_RUN_LENGTH),
+      [-CORRIDOR_HALF_WIDTH, 3.03, TURN_RUN_LENGTH / 2],
+    );
+    const innerWallLength = TURN_RUN_LENGTH - CORRIDOR_HALF_WIDTH;
+    addTurnWall(
+      new THREE.BoxGeometry(0.5, 6.2, innerWallLength),
+      [
+        CORRIDOR_HALF_WIDTH,
+        3.03,
+        CORRIDOR_HALF_WIDTH + innerWallLength / 2,
+      ],
+    );
+    addTurnWall(
+      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 6.2, 0.5),
+      [0, 3.03, -CORRIDOR_HALF_WIDTH],
+    );
+    for (const side of [-1, 1]) {
+      addTurnWall(
+        new THREE.BoxGeometry(innerWallLength, 6.2, 0.5),
+        [
+          CORRIDOR_HALF_WIDTH + innerWallLength / 2,
+          3.03,
+          side * CORRIDOR_HALF_WIDTH,
+        ],
+      );
+    }
+
+    addMesh(
+      new THREE.BoxGeometry(0.04, 2.15, TURN_RUN_LENGTH - 0.2),
+      tileMaterial,
+      turnRig,
+      [-(CORRIDOR_HALF_WIDTH - 0.27), 1.08, TURN_RUN_LENGTH / 2],
+    );
+    addMesh(
+      new THREE.BoxGeometry(0.04, 2.15, innerWallLength - 0.2),
+      tileMaterial,
+      turnRig,
+      [
+        CORRIDOR_HALF_WIDTH - 0.27,
+        1.08,
+        CORRIDOR_HALF_WIDTH + innerWallLength / 2,
+      ],
     );
     for (const side of [-1, 1]) {
       addMesh(
-        new THREE.BoxGeometry(0.5, 6.2, 30),
-        wallMaterial,
-        branchCorridor,
-        [side * CORRIDOR_HALF_WIDTH, 3.03, -14.5],
-      );
-      addMesh(
-        new THREE.BoxGeometry(0.04, 2.15, 29.8),
+        new THREE.BoxGeometry(innerWallLength - 0.2, 2.15, 0.04),
         tileMaterial,
-        branchCorridor,
-        [side * (CORRIDOR_HALF_WIDTH - 0.27), 1.08, -14.5],
+        turnRig,
+        [
+          CORRIDOR_HALF_WIDTH + innerWallLength / 2,
+          1.08,
+          side * (CORRIDOR_HALF_WIDTH - 0.27),
+        ],
       );
     }
-    for (const z of [-5, -15, -25]) {
+
+    for (const z of [10, 22, 34]) {
       addMesh(
         new THREE.BoxGeometry(2.7, 0.12, 0.62),
         toon(0xa39c78),
-        branchCorridor,
+        turnRig,
         [0, 5.92, z],
       );
+      const incomingLight = new THREE.PointLight(
+        0xc6c09d,
+        DEFAULT_SCENE_TUNING.ceiling,
+        14,
+        1.85,
+      );
+      incomingLight.position.set(0, 5.65, z);
+      turnRig.add(incomingLight);
+      ceilingLights.push(incomingLight);
+    }
+    for (const x of [10, 22, 34]) {
+      addMesh(
+        new THREE.BoxGeometry(0.62, 0.12, 2.7),
+        toon(0xa39c78),
+        turnRig,
+        [x, 5.92, 0],
+      );
+      const outgoingLight = new THREE.PointLight(
+        0xc6c09d,
+        DEFAULT_SCENE_TUNING.ceiling,
+        14,
+        1.85,
+      );
+      outgoingLight.position.set(x, 5.65, 0);
+      turnRig.add(outgoingLight);
+      ceilingLights.push(outgoingLight);
     }
 
     const nodeSceneRoot = new THREE.Group();
@@ -1175,16 +1271,7 @@ export default function RunnerScene3D({
       });
       oldMaterial.dispose();
       clueSide = kind === "turn" ? -1 : 1;
-      wallClue.position.set(
-        clueSide * (CORRIDOR_HALF_WIDTH - 0.3),
-        3.1,
-        -14,
-      );
-      wallClue.rotation.set(
-        0,
-        clueSide < 0 ? Math.PI / 2 - 0.08 : -Math.PI / 2 + 0.08,
-        kind === "turn" ? -0.025 : 0.035,
-      );
+      cluePathDistance = 14;
       clueLight.color.set(kind === "turn" ? 0xf0d9ac : 0xc03229);
       clueLight.position.set(0, 0.2, 1.8);
     }
@@ -1216,11 +1303,19 @@ export default function RunnerScene3D({
     const rearLookTarget = new THREE.Vector3();
     const cameraLookTarget = new THREE.Vector3();
     const pathForward = new THREE.Vector3(0, 0, -1);
+    const pathRight = new THREE.Vector3(1, 0, 0);
+    const desiredCameraPosition = new THREE.Vector3();
+    const resolvedCameraPosition = new THREE.Vector3();
+    const cameraCollisionOrigin = new THREE.Vector3(0, 2.35, 0);
+    const cameraCollisionDirection = new THREE.Vector3();
+    const cameraRaycaster = new THREE.Raycaster();
     const drawingBufferSize = new THREE.Vector2();
     let elapsed = 0;
     let cameraYaw = 0;
+    let previousTurn: TurnDirection = 0;
     let previousClueActive = false;
     let clueTraveling = false;
+    let cluePathDistance = 14;
 
     const smoothStep = (from: number, to: number, value: number) => {
       const normalized = THREE.MathUtils.clamp(
@@ -1230,6 +1325,81 @@ export default function RunnerScene3D({
       );
       return normalized * normalized * (3 - 2 * normalized);
     };
+
+    function sampleTurnPath(progress: number) {
+      if (progress < 0.52) {
+        const phase = smoothStep(0, 0.52, progress);
+        return {
+          x: 0,
+          z: THREE.MathUtils.lerp(
+            TURN_PATH_START,
+            TURN_RADIUS,
+            phase,
+          ),
+          angle: 0,
+        };
+      }
+      if (progress < 0.8) {
+        const phase = smoothStep(0.52, 0.8, progress);
+        const theta = Math.PI + phase * Math.PI * 0.5;
+        return {
+          x: TURN_RADIUS + Math.cos(theta) * TURN_RADIUS,
+          z: TURN_RADIUS + Math.sin(theta) * TURN_RADIUS,
+          angle: phase * Math.PI * 0.5,
+        };
+      }
+      const phase = smoothStep(0.8, 1, progress);
+      return {
+        x: THREE.MathUtils.lerp(
+          TURN_RADIUS,
+          TURN_PATH_START,
+          phase,
+        ),
+        z: 0,
+        angle: Math.PI * 0.5,
+      };
+    }
+
+    function resolveCameraCollision(
+      target: THREE.Vector3,
+      occluders: THREE.Mesh[],
+    ) {
+      cameraCollisionDirection
+        .copy(target)
+        .sub(cameraCollisionOrigin);
+      const desiredDistance = cameraCollisionDirection.length();
+      if (desiredDistance <= 0.001 || occluders.length === 0) {
+        mount!.dataset.cameraOccluded = "false";
+        return resolvedCameraPosition.copy(target);
+      }
+
+      cameraCollisionDirection.normalize();
+      cameraRaycaster.set(
+        cameraCollisionOrigin,
+        cameraCollisionDirection,
+      );
+      cameraRaycaster.near = 0;
+      cameraRaycaster.far = desiredDistance;
+      turnRig.updateMatrixWorld(true);
+      const obstruction = cameraRaycaster.intersectObjects(
+        occluders,
+        false,
+      )[0];
+
+      if (!obstruction) {
+        mount!.dataset.cameraOccluded = "false";
+        return resolvedCameraPosition.copy(target);
+      }
+
+      const safeDistance = Math.max(
+        CAMERA_MIN_DISTANCE,
+        obstruction.distance - 0.38,
+      );
+      mount!.dataset.cameraOccluded = "true";
+      return resolvedCameraPosition
+        .copy(cameraCollisionOrigin)
+        .addScaledVector(cameraCollisionDirection, safeDistance);
+    }
 
     function resize() {
       const width = Math.max(1, mount!.clientWidth);
@@ -1340,18 +1510,37 @@ export default function RunnerScene3D({
 
       elapsed += dt;
       const swing = Math.sin(elapsed * 11.5) * 0.74;
-      const turnPhase =
-        current.turn === 0
-          ? 0
-          : smoothStep(0.54, 0.94, current.segmentProgress);
-      const targetCameraYaw = -current.turn * turnPhase * Math.PI * 0.42;
+      const turnActive = current.turn !== 0;
+      const turnPath = sampleTurnPath(current.segmentProgress);
+
+      if (current.turn !== previousTurn) {
+        cameraYaw = 0;
+        camera.position.set(0, 4.8, CAMERA_TRAIL_DISTANCE);
+        previousTurn = current.turn;
+      }
+
+      const targetCameraYaw = turnActive
+        ? -current.turn * turnPath.angle
+        : 0;
       cameraYaw = THREE.MathUtils.damp(
         cameraYaw,
         targetCameraYaw,
-        6.4,
+        8.5,
         dt,
       );
       pathForward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+      pathRight.set(-pathForward.z, 0, pathForward.x);
+
+      world.visible = !turnActive;
+      turnRig.visible = turnActive;
+      if (turnActive) {
+        turnRig.scale.set(current.turn, 1, 1);
+        turnRig.position.set(
+          -current.turn * turnPath.x,
+          0,
+          -turnPath.z,
+        );
+      }
 
       updateNodeLabel(current.nodeLabel, current.nodeSceneKind);
       for (const kind of Object.keys(
@@ -1360,27 +1549,27 @@ export default function RunnerScene3D({
         nodeSceneGroups[kind].visible = kind === current.nodeSceneKind;
       }
       const nodeApproach = smoothStep(0.06, 1, current.segmentProgress);
-      const nodeDistance = THREE.MathUtils.lerp(48, 8.5, nodeApproach);
       nodeSceneRoot.visible = current.segmentProgress > 0.04;
-      nodeSceneRoot.position.set(
-        pathForward.x * nodeDistance,
-        0,
-        pathForward.z * nodeDistance,
-      );
-      nodeSceneRoot.rotation.y = cameraYaw;
+      if (turnActive) {
+        nodeSceneRoot.position.set(
+          current.turn * (TURN_NODE_DISTANCE - turnPath.x),
+          0,
+          -turnPath.z,
+        );
+        nodeSceneRoot.rotation.y = -current.turn * Math.PI * 0.5;
+      } else {
+        const nodeDistance = THREE.MathUtils.lerp(
+          48,
+          8.5,
+          nodeApproach,
+        );
+        nodeSceneRoot.position.set(0, 0, -nodeDistance);
+        nodeSceneRoot.rotation.y = 0;
+      }
       nodeSceneRoot.scale.setScalar(
         THREE.MathUtils.lerp(0.82, 1, nodeApproach),
       );
 
-      turnSetPiece.visible = current.turn !== 0;
-      turnSetPiece.position.set(
-        0,
-        0,
-        THREE.MathUtils.lerp(-48, -8.2, nodeApproach),
-      );
-      branchCorridor.rotation.y = -current.turn * Math.PI / 2;
-      turnBulkhead.rotation.z =
-        Math.sin(elapsed * 0.7) * 0.002 * current.turn;
       machineFan.rotation.z -= dt * 1.9;
       valveWheel.rotation.z =
         Math.sin(elapsed * 0.8) * 0.12 + current.segmentProgress * 0.35;
@@ -1399,7 +1588,9 @@ export default function RunnerScene3D({
       bodyRoot.position.y = 0.06 + Math.abs(Math.sin(elapsed * 11.5)) * 0.07;
       bodyRoot.rotation.z = THREE.MathUtils.damp(
         bodyRoot.rotation.z,
-        current.turn * -0.075,
+        current.turn *
+          -0.075 *
+          Math.sin(Math.min(Math.PI, turnPath.angle * 2)),
         5,
         dt,
       );
@@ -1407,8 +1598,8 @@ export default function RunnerScene3D({
 
       player.position.x = THREE.MathUtils.damp(
         player.position.x,
-        current.turn * 0.34,
-        4.5,
+        0,
+        8,
         dt,
       );
       player.rotation.y = THREE.MathUtils.damp(
@@ -1428,20 +1619,27 @@ export default function RunnerScene3D({
 
       world.rotation.y = THREE.MathUtils.damp(
         world.rotation.y,
-        current.turn * turnPhase * -0.012,
-        3.6,
+        0,
+        8,
         dt,
       );
       world.position.x = THREE.MathUtils.damp(
         world.position.x,
-        current.turn * turnPhase * -0.14,
-        3.6,
+        0,
+        8,
         dt,
       );
 
+      const monsterBehindDistance =
+        7.15 - current.monsterPressure * 0.45;
+      const monsterLateral =
+        -3.05 + current.monsterPressure * 0.48;
       const targetMonsterX =
-        -3.05 + current.turn * 0.16 + current.monsterPressure * 0.48;
-      const targetMonsterZ = 7.15 - current.monsterPressure * 0.45;
+        -pathForward.x * monsterBehindDistance +
+        pathRight.x * monsterLateral;
+      const targetMonsterZ =
+        -pathForward.z * monsterBehindDistance +
+        pathRight.z * monsterLateral;
       const targetMonsterScale = 0.78 + current.monsterPressure * 0.08;
       monster.position.x = THREE.MathUtils.damp(
         monster.position.x,
@@ -1483,10 +1681,27 @@ export default function RunnerScene3D({
       previousClueActive = current.clueActive;
 
       if (clueTraveling) {
-        wallClue.position.z += RUN_SPEED * dt;
+        cluePathDistance -= RUN_SPEED * dt;
+        wallClue.position.set(
+          pathForward.x * cluePathDistance +
+            pathRight.x *
+              clueSide *
+              (CORRIDOR_HALF_WIDTH - 0.3),
+          3.1,
+          pathForward.z * cluePathDistance +
+            pathRight.z *
+              clueSide *
+              (CORRIDOR_HALF_WIDTH - 0.3),
+        );
+        wallClue.rotation.set(
+          0,
+          cameraYaw -
+            clueSide * (Math.PI / 2 - 0.08),
+          current.clueKind === "turn" ? -0.025 : 0.035,
+        );
         clueLight.intensity =
           1.1 + Math.max(0, Math.sin(elapsed * 6.2)) * 0.55;
-        if (!current.clueActive || wallClue.position.z > 4.8) {
+        if (!current.clueActive || cluePathDistance < -4.8) {
           wallClue.visible = false;
           clueTraveling = false;
           clueLight.intensity = 0;
@@ -1495,49 +1710,51 @@ export default function RunnerScene3D({
 
       dust.position.z += RUN_SPEED * dt * 0.44;
       if (dust.position.z > 18) dust.position.z = 0;
+      dust.rotation.y = cameraYaw;
 
-      const cameraTargetX = player.position.x - pathForward.x * 9.2;
-      const cameraTargetZ = -pathForward.z * 9.2;
-      camera.position.x = THREE.MathUtils.damp(
-        camera.position.x,
-        cameraTargetX,
-        7,
-        dt,
+      const cornerCompression = turnActive
+        ? Math.max(0, Math.sin(turnPath.angle * 2))
+        : 0;
+      const cameraTrailDistance = THREE.MathUtils.lerp(
+        CAMERA_TRAIL_DISTANCE,
+        5.3,
+        cornerCompression,
       );
-      camera.position.y =
+      desiredCameraPosition.set(
+        -pathForward.x * cameraTrailDistance,
         4.8 + Math.sin(elapsed * 11.5) * 0.022 +
-        current.monsterPressure * 0.06;
-      camera.position.z = THREE.MathUtils.damp(
-        camera.position.z,
-        cameraTargetZ,
-        7,
-        dt,
+          current.monsterPressure * 0.06,
+        -pathForward.z * cameraTrailDistance,
+      );
+      const safeCameraPosition = turnActive
+        ? resolveCameraCollision(
+            desiredCameraPosition,
+            turnCameraOccluders,
+          )
+        : resolvedCameraPosition.copy(desiredCameraPosition);
+      if (!turnActive) {
+        mount!.dataset.cameraOccluded = "false";
+      }
+      const cameraFollowAlpha = 1 - Math.exp(-12 * dt);
+      camera.position.lerp(
+        safeCameraPosition,
+        cameraFollowAlpha,
       );
       cameraLookTarget.set(
-        player.position.x + pathForward.x * 6.4,
+        pathForward.x * 6.4,
         1.55,
         pathForward.z * 6.4,
       );
       camera.lookAt(cameraLookTarget);
 
-      rearCamera.position.x = THREE.MathUtils.damp(
-        rearCamera.position.x,
-        player.position.x * 0.94,
-        8,
-        dt,
-      );
+      rearCamera.position.x = -pathForward.x * 1.1;
       rearCamera.position.y = THREE.MathUtils.damp(
         rearCamera.position.y,
         3.05,
         8,
         dt,
       );
-      rearCamera.position.z = THREE.MathUtils.damp(
-        rearCamera.position.z,
-        1.1,
-        8,
-        dt,
-      );
+      rearCamera.position.z = -pathForward.z * 1.1;
       rearLookTarget.set(
         monster.position.x,
         2.05 + monster.position.y,
@@ -1553,12 +1770,11 @@ export default function RunnerScene3D({
       rearCamera.updateProjectionMatrix();
 
       flashlight.position.set(
-        player.position.x - pathForward.x * 6.3,
+        -pathForward.x * 6.3,
         4.45,
         -pathForward.z * 6.3,
       );
-      flashlight.target.position.x =
-        player.position.x + pathForward.x * 13.5;
+      flashlight.target.position.x = pathForward.x * 13.5;
       flashlight.target.position.y = 2.05;
       flashlight.target.position.z = pathForward.z * 13.5;
 
