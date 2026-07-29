@@ -31,6 +31,7 @@ interface RunnerScene3DProps {
   turn: TurnDirection;
   monsterPressure: number;
   monsterDistance: number;
+  lookBack: boolean;
   clueActive: boolean;
   clueKind: ClueKind;
   clueText: string;
@@ -180,6 +181,7 @@ export default function RunnerScene3D({
   turn,
   monsterPressure,
   monsterDistance,
+  lookBack,
   clueActive,
   clueKind,
   clueText,
@@ -192,6 +194,7 @@ export default function RunnerScene3D({
     turn,
     monsterPressure,
     monsterDistance,
+    lookBack,
     clueActive,
     clueKind,
     clueText,
@@ -205,6 +208,7 @@ export default function RunnerScene3D({
       turn,
       monsterPressure,
       monsterDistance,
+      lookBack,
       clueActive,
       clueKind,
       clueText,
@@ -215,6 +219,7 @@ export default function RunnerScene3D({
     clueActive,
     clueKind,
     clueText,
+    lookBack,
     monsterDistance,
     monsterPressure,
     paused,
@@ -247,6 +252,7 @@ export default function RunnerScene3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = DEFAULT_SCENE_TUNING.exposure;
+    renderer.autoClear = false;
     renderer.domElement.className = "runner-3d-canvas";
     renderer.domElement.setAttribute("aria-hidden", "true");
     mount.prepend(renderer.domElement);
@@ -260,6 +266,8 @@ export default function RunnerScene3D({
 
     const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 150);
     camera.position.set(0, 4.8, 9.2);
+    const rearCamera = new THREE.PerspectiveCamera(64, 1, 0.08, 150);
+    rearCamera.position.set(0, 3.05, 1.1);
 
     const ambient = new THREE.HemisphereLight(
       0xc2c9c3,
@@ -634,8 +642,8 @@ export default function RunnerScene3D({
     scene.add(playerShadow);
 
     const monster = new THREE.Group();
-    monster.position.set(-1.6, 0, 2.9);
-    monster.scale.setScalar(0.65);
+    monster.position.set(-3.05, 0, 7.1);
+    monster.scale.setScalar(0.78);
     scene.add(monster);
     const monsterBody = new THREE.Group();
     monster.add(monsterBody);
@@ -776,6 +784,8 @@ export default function RunnerScene3D({
     scene.add(dust);
 
     const clock = new THREE.Clock();
+    const rearLookTarget = new THREE.Vector3();
+    const drawingBufferSize = new THREE.Vector2();
     let elapsed = 0;
     let previousClueActive = false;
     let clueTraveling = false;
@@ -785,6 +795,8 @@ export default function RunnerScene3D({
       const height = Math.max(1, mount!.clientHeight);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      rearCamera.aspect = 1;
+      rearCamera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.55));
     }
@@ -792,6 +804,57 @@ export default function RunnerScene3D({
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(mount);
     resize();
+
+    function renderChaseScene(fullLookBack: boolean) {
+      renderer.getDrawingBufferSize(drawingBufferSize);
+      const width = Math.max(1, Math.floor(drawingBufferSize.x));
+      const height = Math.max(1, Math.floor(drawingBufferSize.y));
+
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, width, height);
+      renderer.clear(true, true, true);
+
+      if (fullLookBack) {
+        const playerVisible = player.visible;
+        const shadowVisible = playerShadow.visible;
+        player.visible = false;
+        playerShadow.visible = false;
+
+        rearCamera.aspect = width / height;
+        rearCamera.updateProjectionMatrix();
+        renderer.render(scene, rearCamera);
+
+        player.visible = playerVisible;
+        playerShadow.visible = shadowVisible;
+        return;
+      }
+
+      renderer.render(scene, camera);
+
+      const mirrorWidth = Math.floor(width * 0.26);
+      const mirrorHeight = Math.floor(mirrorWidth * 0.58);
+      const margin = Math.floor(width * 0.016);
+      const mirrorX = width - mirrorWidth - margin;
+      const mirrorY = height - mirrorHeight - margin;
+      const playerVisible = player.visible;
+      const shadowVisible = playerShadow.visible;
+
+      player.visible = false;
+      playerShadow.visible = false;
+      rearCamera.aspect = mirrorWidth / mirrorHeight;
+      rearCamera.updateProjectionMatrix();
+
+      renderer.clearDepth();
+      renderer.setScissorTest(true);
+      renderer.setScissor(mirrorX, mirrorY, mirrorWidth, mirrorHeight);
+      renderer.setViewport(mirrorX, mirrorY, mirrorWidth, mirrorHeight);
+      renderer.render(scene, rearCamera);
+
+      player.visible = playerVisible;
+      playerShadow.visible = shadowVisible;
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, width, height);
+    }
 
     function animate() {
       if (disposed) return;
@@ -830,7 +893,7 @@ export default function RunnerScene3D({
         current.monsterPressure * 0.75;
 
       if (current.paused) {
-        renderer.render(scene, camera);
+        renderChaseScene(current.lookBack);
         return;
       }
 
@@ -878,9 +941,10 @@ export default function RunnerScene3D({
         dt,
       );
 
-      const targetMonsterX = -1.55 + current.turn * 0.42;
-      const targetMonsterZ = 3.35 - current.monsterPressure * 1.78;
-      const targetMonsterScale = 0.6 + current.monsterPressure * 0.39;
+      const targetMonsterX =
+        -3.05 + current.turn * 0.16 + current.monsterPressure * 0.48;
+      const targetMonsterZ = 7.15 - current.monsterPressure * 0.45;
+      const targetMonsterScale = 0.78 + current.monsterPressure * 0.08;
       monster.position.x = THREE.MathUtils.damp(
         monster.position.x,
         targetMonsterX,
@@ -901,9 +965,9 @@ export default function RunnerScene3D({
       leftMonsterArm.rotation.x = -swing * 0.58;
       rightMonsterArm.rotation.x = swing * 0.58;
       dangerLight.intensity =
-        0.08 +
-        current.monsterPressure * 0.75 +
-        Math.max(0, Math.sin(elapsed * 5.5)) * 0.12;
+        0.02 +
+        current.monsterPressure * 0.32 +
+        Math.max(0, Math.sin(elapsed * 5.5)) * 0.08;
       dangerLight.position.copy(monster.position);
       dangerLight.position.y += 2.4;
       dangerLight.position.z += 0.45;
@@ -945,12 +1009,44 @@ export default function RunnerScene3D({
         current.monsterPressure * 0.06;
       camera.lookAt(player.position.x * 0.18, 1.55, -6.4);
 
+      rearCamera.position.x = THREE.MathUtils.damp(
+        rearCamera.position.x,
+        player.position.x * 0.94,
+        8,
+        dt,
+      );
+      rearCamera.position.y = THREE.MathUtils.damp(
+        rearCamera.position.y,
+        3.05,
+        8,
+        dt,
+      );
+      rearCamera.position.z = THREE.MathUtils.damp(
+        rearCamera.position.z,
+        1.1,
+        8,
+        dt,
+      );
+      rearLookTarget.set(
+        monster.position.x,
+        2.05 + monster.position.y,
+        monster.position.z + 0.12,
+      );
+      rearCamera.lookAt(rearLookTarget);
+      rearCamera.fov = THREE.MathUtils.damp(
+        rearCamera.fov,
+        current.lookBack ? 64 : 66,
+        8,
+        dt,
+      );
+      rearCamera.updateProjectionMatrix();
+
       flashlight.position.x = camera.position.x * 0.76;
       flashlight.target.position.x = player.position.x * 0.45;
       flashlight.target.position.y = 2.05;
       flashlight.target.position.z = -13.5;
 
-      renderer.render(scene, camera);
+      renderChaseScene(current.lookBack);
     }
 
     renderer.setAnimationLoop(animate);
@@ -997,6 +1093,17 @@ export default function RunnerScene3D({
         <b>無法啟動 3D 畫面</b>
         <small>請確認瀏覽器已啟用 WebGL</small>
       </div>
+      <div
+        className={`runner-rear-mirror-frame ${lookBack ? "hidden" : ""}`}
+        aria-hidden="true"
+      >
+        <b>後視鏡</b>
+        <small>LIVE</small>
+      </div>
+      <div
+        className={`runner-lookback-vignette ${lookBack ? "visible" : ""}`}
+        aria-hidden="true"
+      />
     </div>
   );
 }
