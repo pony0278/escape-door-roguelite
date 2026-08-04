@@ -26,6 +26,9 @@ type GamePhase =
 type ClueId = "turn" | "knock";
 type LockStep = "rotation" | "knock";
 type ClosingStep = "close" | "lock";
+type ObservationDirection = "forward" | "left" | "right";
+type RunIncidentKind = "blackout" | "steam" | "collapse";
+type RunIncidentPhase = "warning" | "active" | "cleared";
 type MapNodeId =
   | "start"
   | "northEntry"
@@ -65,6 +68,24 @@ interface RouteConfig {
   events: RouteEvent[];
   nodeIds: MapNodeId[];
   distanceMeters: number;
+  incident: RouteIncident;
+}
+
+interface RouteIncident {
+  kind: RunIncidentKind;
+  at: number;
+  warningLeadMs: number;
+  durationMs: number;
+  penaltySeconds: number;
+  title: string;
+  warning: string;
+  active: string;
+  cleared: string;
+}
+
+interface ActiveRunIncident extends RouteIncident {
+  phase: RunIncidentPhase;
+  progress: number;
 }
 
 interface MapNode {
@@ -109,6 +130,8 @@ const MAP_NODES: MapNode[] = [
   { id: "exit", x: 866, y: 125, label: "逃生門", shortLabel: "門", type: "exit" },
 ];
 
+// These lines are the survivor's suggested corridors, not hard route limits.
+// The player may connect any two landmark nodes in one continuous stroke.
 const MAP_EDGES: Array<readonly [MapNodeId, MapNodeId]> = [
   ["start", "northEntry"],
   ["start", "middleEntry"],
@@ -213,10 +236,8 @@ function getMapEdgePoints(fromId: MapNodeId, toId: MapNodeId) {
   return [MAP_NODE_LOOKUP[fromId], MAP_NODE_LOOKUP[toId]];
 }
 
-function areConnected(from: MapNodeId, to: MapNodeId) {
-  return MAP_EDGES.some(
-    ([a, b]) => (a === from && b === to) || (a === to && b === from),
-  );
+function canConnectRouteNodes(from: MapNodeId, to: MapNodeId) {
+  return from !== to && Boolean(MAP_NODE_LOOKUP[from]) && Boolean(MAP_NODE_LOOKUP[to]);
 }
 
 function calculateRouteDistance(nodeIds: MapNodeId[]) {
@@ -226,6 +247,62 @@ function calculateRouteDistance(nodeIds: MapNodeId[]) {
     const distance = Math.hypot(to.x - from.x, to.y - from.y);
     return total + distance;
   }, 0);
+}
+
+function buildRouteIncident(
+  nodeIds: MapNodeId[],
+  clueEvents: RouteEvent[],
+): RouteIncident {
+  const kind: RunIncidentKind = nodeIds.includes("southStore")
+    ? "steam"
+    : nodeIds.some((id) =>
+        (["northEntry", "turnClue", "northExit"] as MapNodeId[]).includes(id),
+      )
+      ? "blackout"
+      : "collapse";
+  const candidateTimes = [0.34, 0.46, 0.58, 0.68];
+  const at =
+    candidateTimes.find((candidate) =>
+      clueEvents.every((event) => Math.abs(event.at - candidate) >= 0.16),
+    ) ?? 0.5;
+
+  if (kind === "blackout") {
+    return {
+      kind,
+      at,
+      warningLeadMs: 850,
+      durationMs: 1750,
+      penaltySeconds: 0.4,
+      title: "區域停電",
+      warning: "頂燈電壓正在下降",
+      active: "手電筒接管照明，注意兩側牆面",
+      cleared: "備用電力恢復",
+    };
+  }
+  if (kind === "steam") {
+    return {
+      kind,
+      at,
+      warningLeadMs: 900,
+      durationMs: 1850,
+      penaltySeconds: 0.7,
+      title: "蒸汽管破裂",
+      warning: "右側管線傳來高壓異響",
+      active: "白霧遮蔽視線，提示仍可能出現在牆上",
+      cleared: "通道視野逐漸恢復",
+    };
+  }
+  return {
+    kind,
+    at,
+    warningLeadMs: 950,
+    durationMs: 1900,
+    penaltySeconds: 0.9,
+    title: "前方局部坍塌",
+    warning: "碎石落下，路線即將受到干擾",
+    active: "角色自動偏移繞行；你仍要繼續觀察",
+    cleared: "已回到原定路線",
+  };
 }
 
 function buildRouteConfig(nodeIds: MapNodeId[]): RouteConfig {
@@ -242,6 +319,7 @@ function buildRouteConfig(nodeIds: MapNodeId[]): RouteConfig {
       at: Math.min(0.78, Math.max(0.2, index / Math.max(1, nodeIds.length - 1))),
     }];
   });
+  const incident = buildRouteIncident(nodeIds, events);
   const clueIds = new Set(events.map((event) => event.clueId));
   const hasKey = nodeIds.includes("key");
   const reachedExit = nodeIds.at(-1) === "exit";
@@ -258,19 +336,24 @@ function buildRouteConfig(nodeIds: MapNodeId[]): RouteConfig {
               ? "南側觀察線"
               : "直衝逃生線";
 
+  const baseDoorTimeSeconds = Math.max(
+    8.2,
+    Math.min(12.5, Number((16.2 - durationMs / 1900).toFixed(1))),
+  );
+
   return {
     id: "custom",
     name,
     label: "玩家一筆畫路線",
     durationMs,
-    doorTimeSeconds: Math.max(
-      8.2,
-      Math.min(12.5, Number((16.2 - durationMs / 1900).toFixed(1))),
+    doorTimeSeconds: Number(
+      Math.max(7.2, baseDoorTimeSeconds - incident.penaltySeconds).toFixed(1),
     ),
-    clueWindowMs: 1900,
+    clueWindowMs: 2400,
     events,
     nodeIds,
     distanceMeters,
+    incident,
   };
 }
 
@@ -345,6 +428,7 @@ function formatSeconds(value: number) {
 function phaseInstruction(
   phase: GamePhase,
   activeClue: Clue | null,
+  runIncident: ActiveRunIncident | null,
   lockStep: LockStep,
   closingStep: ClosingStep,
 ) {
@@ -354,7 +438,11 @@ function phaseInstruction(
     case "running":
       return activeClue
         ? "發現可疑物件！立即聚焦，記住門鎖提示。"
-        : "角色正在自動奔跑。注意走廊中的異常物件。";
+        : runIncident?.phase === "warning"
+          ? `${runIncident.warning}。保持觀察，準備應變。`
+          : runIncident?.phase === "active"
+            ? runIncident.active
+            : "角色正在自動奔跑。注意走廊中的異常物件。";
     case "door":
       return lockStep === "rotation"
         ? "回想沿途提示，操作門鎖。"
@@ -389,6 +477,8 @@ export default function Home() {
   const [failureReason, setFailureReason] = useState("");
   const [soundOn, setSoundOn] = useState(true);
   const [runPaused, setRunPaused] = useState(false);
+  const [runIncident, setRunIncident] =
+    useState<ActiveRunIncident | null>(null);
   const [routeLocked, setRouteLocked] = useState<RouteConfig | null>(null);
   const [sceneTuning, setSceneTuning] =
     useState<SceneTuning>(readStoredSceneTuning);
@@ -461,6 +551,7 @@ export default function Home() {
     setPlannedNodeIds(["start"]);
     setRouteError("");
     setRunProgress(0);
+    setRunIncident(null);
     setActiveClue(null);
     setFocusedClue(null);
     setSeenClueIds([]);
@@ -478,13 +569,14 @@ export default function Home() {
 
   const startRun = useCallback(() => {
     if (!routeIsReady) {
-      setRouteError("請從 START 按住，至少連上一個相鄰節點。");
+      setRouteError("請從 START 按住，至少連上一個亮起的地標點。");
       playTone(95, 0.15, 0.05);
       return;
     }
     setRouteLocked(plannedRoute);
     setRouteError("");
     setRunProgress(0);
+    setRunIncident(null);
     setActiveClue(null);
     setFocusedClue(null);
     setSeenClueIds([]);
@@ -516,13 +608,13 @@ export default function Home() {
           playTone(210, 0.05, 0.02);
           return current.slice(0, -1);
         }
-        if (!areConnected(lastNodeId, nodeId)) {
-          setRouteError("只能連接目前位置旁邊的道路節點。");
+        if (!canConnectRouteNodes(lastNodeId, nodeId)) {
+          setRouteError("請拖到另一個地標點。");
           playTone(95, 0.1, 0.04);
           return current;
         }
         if (current.includes(nodeId)) {
-          setRouteError("同一個節點不能重複經過；可返回上一步重新畫。");
+          setRouteError("這個地標已經走過；拖回上一點可撤銷，或改接亮起的地標。");
           playTone(95, 0.1, 0.04);
           return current;
         }
@@ -569,6 +661,7 @@ export default function Home() {
     let finished = false;
     const revealedClues = new Set<ClueId>();
     let activeWindow: { clueId: ClueId; expiresAt: number } | null = null;
+    let previousIncidentPhase: RunIncidentPhase | null = null;
 
     const progressTimer = window.setInterval(() => {
       const now = performance.now();
@@ -578,6 +671,53 @@ export default function Home() {
 
       elapsedMs += delta;
       setRunProgress(Math.min(1, elapsedMs / route.durationMs));
+
+      const incidentStartsAt = route.durationMs * route.incident.at;
+      const incidentWarningAt = Math.max(
+        0,
+        incidentStartsAt - route.incident.warningLeadMs,
+      );
+      const incidentEndsAt = incidentStartsAt + route.incident.durationMs;
+      const incidentClearsAt = incidentEndsAt + 700;
+      let nextIncident: ActiveRunIncident | null = null;
+      if (elapsedMs >= incidentWarningAt && elapsedMs < incidentStartsAt) {
+        nextIncident = {
+          ...route.incident,
+          phase: "warning",
+          progress: Math.min(
+            1,
+            (elapsedMs - incidentWarningAt) /
+              Math.max(1, route.incident.warningLeadMs),
+          ),
+        };
+      } else if (elapsedMs >= incidentStartsAt && elapsedMs < incidentEndsAt) {
+        nextIncident = {
+          ...route.incident,
+          phase: "active",
+          progress: Math.min(
+            1,
+            (elapsedMs - incidentStartsAt) /
+              Math.max(1, route.incident.durationMs),
+          ),
+        };
+      } else if (elapsedMs >= incidentEndsAt && elapsedMs < incidentClearsAt) {
+        nextIncident = {
+          ...route.incident,
+          phase: "cleared",
+          progress: 1,
+        };
+      }
+      if (nextIncident?.phase !== previousIncidentPhase) {
+        previousIncidentPhase = nextIncident?.phase ?? null;
+        if (nextIncident?.phase === "warning") {
+          playTone(260, 0.11, 0.035);
+        } else if (nextIncident?.phase === "active") {
+          playTone(nextIncident.kind === "blackout" ? 105 : 145, 0.24, 0.055);
+        } else if (nextIncident?.phase === "cleared") {
+          playTone(370, 0.1, 0.03);
+        }
+      }
+      setRunIncident(nextIncident);
 
       route.events.forEach((event) => {
         const showAt = route.durationMs * event.at;
@@ -612,6 +752,7 @@ export default function Home() {
         runPausedRef.current = false;
         setRunPaused(false);
         setRunProgress(1);
+        setRunIncident(null);
         setActiveClue(null);
         setFocusedClue(null);
         const finalNodeId = route.nodeIds.at(-1) ?? "start";
@@ -697,10 +838,6 @@ export default function Home() {
         if (event.key === "Enter" && routeIsReady) startRun();
         if (event.key === "Escape") clearRoute();
       }
-      if (phase === "running" && event.code === "Space") {
-        event.preventDefault();
-        focusCurrentClue();
-      }
       if (phase === "running" && event.key.toLowerCase() === "p") {
         event.preventDefault();
         toggleRunPause();
@@ -713,7 +850,6 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     clearRoute,
-    focusCurrentClue,
     phase,
     plannedNodeIds.length,
     resetRun,
@@ -796,7 +932,7 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark">ED</span>
           <div>
-            <p>PHASE P2.4</p>
+            <p>PHASE P2.5.2</p>
             <h1>逃生門計畫</h1>
           </div>
         </div>
@@ -846,6 +982,7 @@ export default function Home() {
           {phaseInstruction(
             phase,
             activeClue,
+            runIncident,
             lockStep,
             closingStep,
           )}
@@ -881,6 +1018,7 @@ export default function Home() {
             paused={runPaused}
             activeClue={activeClue}
             focusedClue={focusedClue}
+            incident={runIncident}
             seenClueIds={seenClueIds}
             onFocus={focusCurrentClue}
             onPauseToggle={toggleRunPause}
@@ -931,12 +1069,12 @@ export default function Home() {
       </div>
 
       <footer className="prototype-footer">
-        <span>筆記本路線 · 路線與節點場景同步</span>
+        <span>地圖角度同步 · 前向淨空 · 防穿牆鏡頭</span>
         <p>
           {phase === "planning"
-            ? "從 START 按住一筆畫 · 放開完成 · Esc 清除"
+            ? "從 START 按住一筆畫 · 任一亮點可接 · Esc 清除"
             : phase === "running"
-              ? "快捷鍵：P 暫停／繼續 · Space 聚焦提示"
+              ? "快捷鍵：A/D 觀察牆面 · Space 聚焦 · B 回頭 · P 暫停"
               : phase === "success" || phase === "fail"
                 ? "快捷鍵：R 再試一次"
                 : "錯誤操作會損失 0.8 秒"}
@@ -982,9 +1120,13 @@ function PlanningScreen({
   const routeCanvasRef = useRef<HTMLCanvasElement>(null);
   const activePointerRef = useRef<number | null>(null);
   const lastNodeId = plannedNodeIds.at(-1) ?? "start";
+  const previousNodeId = plannedNodeIds.at(-2);
   const lastNode = MAP_NODE_LOOKUP[lastNodeId];
   const safeRoute = hasKey && reachedExit;
   const finalLocation = MAP_NODE_LOOKUP[lastNodeId].label;
+  const availableNodeCount = MAP_NODES.filter(
+    (node) => !plannedNodeIds.includes(node.id),
+  ).length;
 
   useEffect(() => {
     const canvas = mapCanvasRef.current;
@@ -1574,14 +1716,17 @@ function PlanningScreen({
 
   const nearestConnectedNode = (point: { x: number; y: number }) => {
     const candidates = MAP_NODES.filter(
-      (node) => node.id !== lastNodeId && areConnected(lastNodeId, node.id),
+      (node) =>
+        node.id !== lastNodeId &&
+        canConnectRouteNodes(lastNodeId, node.id) &&
+        (!plannedNodeIds.includes(node.id) || node.id === previousNodeId),
     )
       .map((node) => ({
         node,
         distance: Math.hypot(node.x - point.x, node.y - point.y),
       }))
       .sort((a, b) => a.distance - b.distance);
-    return candidates[0]?.distance <= 55 ? candidates[0].node : null;
+    return candidates[0]?.distance <= 72 ? candidates[0].node : null;
   };
 
   const beginStroke = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1602,7 +1747,7 @@ function PlanningScreen({
     onBeginStroke();
     setIsDrawing(true);
     setCursorPoint(point);
-    setStrokeMessage("不要放開，沿著道路拖過黑色地標點");
+    setStrokeMessage("不要放開；任一亮起的地標都能直接連線");
   };
 
   const moveStroke = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1614,7 +1759,11 @@ function PlanningScreen({
     const snappedNode = nearestConnectedNode(point);
     if (snappedNode) {
       onAppendNode(snappedNode.id);
-      setStrokeMessage(`已連到「${snappedNode.label}」`);
+      setStrokeMessage(
+        snappedNode.id === previousNodeId
+          ? `已退回「${snappedNode.label}」；可以改畫別條路`
+          : `已連到「${snappedNode.label}」；其他亮點仍可接`,
+      );
     }
   };
 
@@ -1634,7 +1783,7 @@ function PlanningScreen({
     (isDrawing
       ? strokeMessage
       : !isReady
-        ? "這是一張可辨識的連通道路網。請從底部「YOU ARE HERE」開始規劃。"
+        ? "從底部「YOU ARE HERE」開始；任一亮起的地標都能直接連線。"
         : safeRoute
           ? "路線已經過鑰匙並抵達逃生門。可以現在開始逃亡。"
           : reachedExit && !hasKey
@@ -1652,9 +1801,9 @@ function PlanningScreen({
             <h2>倖存者手繪的 B1 地下層</h2>
           </div>
           <span>
-            可讀的連通道路網
+            所有亮起地標皆可連
             <br />
-            從底部 YOU ARE HERE 開始一筆畫
+            灰黑道路只是建議路線
           </span>
         </div>
 
@@ -1669,7 +1818,7 @@ function PlanningScreen({
             onPointerUp={finishStroke}
             onPointerCancel={finishStroke}
             role="application"
-            aria-label="潦草筆記本逃亡地圖。從底部 YOU ARE HERE 按住，沿道路拖過相鄰地標點。"
+            aria-label="潦草筆記本逃亡地圖。從底部 YOU ARE HERE 按住，拖過任一亮起地標點完成一筆路線。"
             tabIndex={0}
           >
             <canvas
@@ -1691,8 +1840,11 @@ function PlanningScreen({
               const selectedIndex = plannedNodeIds.indexOf(node.id);
               const isSelected = selectedIndex >= 0;
               const isCurrent = node.id === lastNodeId;
+              const canUndo = node.id === previousNodeId;
               const canConnect =
-                node.id !== lastNodeId && areConnected(lastNodeId, node.id);
+                !isSelected &&
+                node.id !== lastNodeId &&
+                canConnectRouteNodes(lastNodeId, node.id);
               return (
                 <span
                   key={node.id}
@@ -1700,14 +1852,14 @@ function PlanningScreen({
                     isSelected ? "selected" : ""
                   } ${isCurrent ? "current" : ""} ${
                     canConnect ? "available" : ""
-                  }`}
+                  } ${canUndo ? "backtrack" : ""}`}
                   style={{
                     left: `${(node.x / MAP_WIDTH) * 100}%`,
                     top: `${(node.y / MAP_HEIGHT) * 100}%`,
                   }}
                   aria-label={`${node.label}${
                     isSelected ? `，路線第 ${selectedIndex + 1} 站` : ""
-                  }`}
+                  }${canConnect ? "，可連線" : ""}${canUndo ? "，拖回可撤銷上一步" : ""}`}
                   role="img"
                 />
               );
@@ -1738,8 +1890,10 @@ function PlanningScreen({
           </button>
           <span className="notebook-readout">
             經過地標：{Math.max(0, plannedNodeIds.length - 1)}
+            　可接選項：{availableNodeCount}
             　路線長度：{route.distanceMeters} m
             　提示：{route.events.length} / 2
+            　風險：{route.incident.title}
           </span>
         </div>
 
@@ -1760,6 +1914,7 @@ function RunningScreen({
   paused,
   activeClue,
   focusedClue,
+  incident,
   seenClueIds,
   onFocus,
   onPauseToggle,
@@ -1772,6 +1927,7 @@ function RunningScreen({
   paused: boolean;
   activeClue: Clue | null;
   focusedClue: Clue | null;
+  incident: ActiveRunIncident | null;
   seenClueIds: ClueId[];
   onFocus: () => void;
   onPauseToggle: () => void;
@@ -1780,11 +1936,24 @@ function RunningScreen({
   onResetTuning: () => void;
 }) {
   const [lookBack, setLookBack] = useState(false);
+  const [observationDirection, setObservationDirection] =
+    useState<ObservationDirection>("forward");
+  const [observationFeedback, setObservationFeedback] = useState("");
+  const observationDirectionRef = useRef<ObservationDirection>("forward");
+
+  const updateObservationDirection = useCallback(
+    (direction: ObservationDirection) => {
+      observationDirectionRef.current = direction;
+      setObservationDirection(direction);
+    },
+    [],
+  );
 
   useEffect(() => {
     const startLookBack = (event: KeyboardEvent) => {
       if (event.code !== "KeyB" || event.repeat) return;
       event.preventDefault();
+      updateObservationDirection("forward");
       setLookBack(true);
     };
     const stopLookBack = (event: KeyboardEvent) => {
@@ -1802,14 +1971,101 @@ function RunningScreen({
       window.removeEventListener("keyup", stopLookBack);
       window.removeEventListener("blur", clearLookBack);
     };
-  }, []);
+  }, [updateObservationDirection]);
+
+  useEffect(() => {
+    const observeFromKeyboard = (event: KeyboardEvent) => {
+      if (event.code === "KeyA" || event.code === "ArrowLeft") {
+        event.preventDefault();
+        setLookBack(false);
+        updateObservationDirection("left");
+      }
+      if (event.code === "KeyD" || event.code === "ArrowRight") {
+        event.preventDefault();
+        setLookBack(false);
+        updateObservationDirection("right");
+      }
+      if (event.code === "Space" && activeClue) {
+        event.preventDefault();
+        const requiredDirection: ObservationDirection =
+          activeClue.id === "turn" ? "left" : "right";
+        if (observationDirectionRef.current === requiredDirection) {
+          onFocus();
+          setObservationFeedback("提示已讀取，記住內容");
+        } else {
+          setObservationFeedback(
+            `提示在${requiredDirection === "left" ? "左" : "右"}牆；先按住${requiredDirection === "left" ? " A " : " D "}觀察`,
+          );
+        }
+      }
+    };
+    const stopKeyboardObservation = (event: KeyboardEvent) => {
+      if (
+        (event.code === "KeyA" || event.code === "ArrowLeft") &&
+        observationDirectionRef.current === "left"
+      ) {
+        updateObservationDirection("forward");
+      }
+      if (
+        (event.code === "KeyD" || event.code === "ArrowRight") &&
+        observationDirectionRef.current === "right"
+      ) {
+        updateObservationDirection("forward");
+      }
+    };
+    window.addEventListener("keydown", observeFromKeyboard);
+    window.addEventListener("keyup", stopKeyboardObservation);
+    return () => {
+      window.removeEventListener("keydown", observeFromKeyboard);
+      window.removeEventListener("keyup", stopKeyboardObservation);
+    };
+  }, [activeClue, onFocus, updateObservationDirection]);
+
+  useEffect(() => {
+    if (activeClue) return;
+    const timer = window.setTimeout(() => setObservationFeedback(""), 900);
+    return () => window.clearTimeout(timer);
+  }, [activeClue]);
 
   const beginLookBack = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    updateObservationDirection("forward");
     setLookBack(true);
   };
   const endLookBack = () => setLookBack(false);
+
+  const beginObservation = (
+    direction: Exclude<ObservationDirection, "forward">,
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setLookBack(false);
+    updateObservationDirection(direction);
+  };
+  const endObservation = (
+    direction: Exclude<ObservationDirection, "forward">,
+  ) => {
+    if (observationDirectionRef.current === direction) {
+      updateObservationDirection("forward");
+    }
+  };
+
+  const clueDirection: ObservationDirection | null = activeClue
+    ? activeClue.id === "turn"
+      ? "left"
+      : "right"
+    : null;
+  const clueAligned = Boolean(
+    clueDirection && observationDirection === clueDirection,
+  );
+  const focusClueFromScene = () => {
+    if (!activeClue || !clueDirection) return;
+    updateObservationDirection(clueDirection);
+    setObservationFeedback("提示已讀取，記住內容");
+    onFocus();
+  };
 
   const segmentCount = Math.max(1, route.nodeIds.length - 1);
   const segmentProgress = Math.min(
@@ -1826,13 +2082,35 @@ function RunningScreen({
     0,
     Math.min(1, segmentProgress - segmentIndex),
   );
-  const horizontalDelta = segmentTo.x - segmentFrom.x;
+  const segmentNextId = route.nodeIds[segmentIndex + 2];
+  const segmentNext = segmentNextId
+    ? MAP_NODE_LOOKUP[segmentNextId]
+    : null;
+  const incomingX = segmentTo.x - segmentFrom.x;
+  const incomingY = segmentTo.y - segmentFrom.y;
+  const outgoingX = segmentNext ? segmentNext.x - segmentTo.x : 0;
+  const outgoingY = segmentNext ? segmentNext.y - segmentTo.y : 0;
+  const cross = incomingX * outgoingY - incomingY * outgoingX;
+  const dot = incomingX * outgoingX + incomingY * outgoingY;
+  const rawTurnAngle = segmentNext ? Math.atan2(cross, dot) : 0;
+  const minimumTurnAngle = Math.PI / 12;
   const turnValue =
-    Math.abs(horizontalDelta) < 55 ? 0 : horizontalDelta < 0 ? -1 : 1;
+    Math.abs(rawTurnAngle) < minimumTurnAngle
+      ? 0
+      : rawTurnAngle > 0
+        ? 1
+        : -1;
+  const turnAngle =
+    turnValue === 0
+      ? 0
+      : Math.min(Math.abs(rawTurnAngle), Math.PI * 0.85);
+  const turnDegrees = Math.round((turnAngle * 180) / Math.PI);
   const turnClass =
     turnValue < 0 ? "turn-left" : turnValue > 0 ? "turn-right" : "turn-straight";
   const turnLabel =
-    turnValue < 0 ? "前方左轉" : turnValue > 0 ? "前方右轉" : "保持直行";
+    turnValue === 0
+      ? "保持直行"
+      : `前方${turnDegrees < 45 ? "緩" : turnDegrees > 105 ? "急" : ""}${turnValue < 0 ? "左" : "右"}轉 ${turnDegrees}°`;
   const nodeSceneKind = getRouteNodeSceneKind(segmentToId);
   const nodeSceneDescription = ROUTE_NODE_SCENE_DESCRIPTIONS[nodeSceneKind];
   const arrivalVisible = segmentLocalProgress >= 0.64;
@@ -1856,6 +2134,7 @@ function RunningScreen({
     "--progress": progress,
     "--monster-pressure": monsterPressure,
     "--route-turn": turnValue,
+    "--route-turn-angle": `${turnDegrees}deg`,
     "--segment-progress": segmentLocalProgress,
     "--corridor-vignette": tuning.vignette,
   } as CSSProperties;
@@ -1886,22 +2165,29 @@ function RunningScreen({
       <div
         className={`chase-stage runner-3d-stage ${turnClass} chase-${chaseState} ${
           lookBack ? "lookback-active" : ""
-        } ${paused ? "is-paused" : ""} ${turningNow ? "turning-now" : ""}`}
+        } observing-${observationDirection} ${paused ? "is-paused" : ""} ${
+          turningNow ? "turning-now" : ""
+        } ${incident ? `incident-${incident.kind} incident-${incident.phase}` : ""}`}
         style={stageStyle}
-        aria-label={`${lookBack ? "回頭查看追兵" : "第三人稱追逐演出"}，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
+        aria-label={`${lookBack ? "回頭查看追兵" : observationDirection === "forward" ? "第三人稱追逐演出" : `正在觀察${observationDirection === "left" ? "左" : "右"}牆`}，目前由${segmentFrom.label}前往${segmentTo.label}，怪物距離約${monsterDistance}公尺`}
       >
         <RunnerScene3D
           progress={progress}
           turn={turnValue}
+          turnAngle={turnAngle}
           monsterPressure={monsterPressure}
           monsterDistance={monsterDistance}
           lookBack={lookBack}
+          observationDirection={observationDirection}
           segmentProgress={segmentLocalProgress}
           nodeSceneKind={nodeSceneKind}
           nodeLabel={segmentTo.label}
           clueActive={Boolean(activeClue)}
           clueKind={activeClue?.id ?? null}
           clueText={activeClue?.value ?? ""}
+          incidentKind={incident?.kind ?? null}
+          incidentPhase={incident?.phase ?? null}
+          incidentProgress={incident?.progress ?? 0}
           tuning={tuning}
           paused={paused}
         />
@@ -1932,6 +2218,37 @@ function RunningScreen({
           <b>{lookBack ? "正在回頭" : "按住回頭"}</b>
           <small>B</small>
         </button>
+
+        <div className="observation-controls" aria-label="牆面觀察控制">
+          <button
+            type="button"
+            className={observationDirection === "left" ? "active" : ""}
+            onPointerDown={(event) => beginObservation("left", event)}
+            onPointerUp={() => endObservation("left")}
+            onPointerCancel={() => endObservation("left")}
+            onLostPointerCapture={() => endObservation("left")}
+            aria-pressed={observationDirection === "left"}
+            aria-label="按住觀察左牆"
+          >
+            <span>◀</span>
+            <b>觀察左牆</b>
+            <small>A</small>
+          </button>
+          <button
+            type="button"
+            className={observationDirection === "right" ? "active" : ""}
+            onPointerDown={(event) => beginObservation("right", event)}
+            onPointerUp={() => endObservation("right")}
+            onPointerCancel={() => endObservation("right")}
+            onLostPointerCapture={() => endObservation("right")}
+            aria-pressed={observationDirection === "right"}
+            aria-label="按住觀察右牆"
+          >
+            <small>D</small>
+            <b>觀察右牆</b>
+            <span>▶</span>
+          </button>
+        </div>
 
         <details
           className="scene-tuning-panel"
@@ -1998,10 +2315,54 @@ function RunningScreen({
           <small>放開 B 或按鈕回到奔跑視角</small>
         </div>
 
+        <div
+          className={`observation-status ${
+            observationDirection !== "forward" ? "visible" : ""
+          }`}
+          role="status"
+        >
+          <span>OBSERVING</span>
+          <b>
+            {observationDirection === "left" ? "左側牆面" : "右側牆面"}
+          </b>
+          <small>放開按鍵回到前方視角</small>
+        </div>
+
+        {incident && (
+          <div
+            className={`run-incident-card ${incident.phase} incident-${incident.kind}`}
+            role="status"
+            aria-live="assertive"
+          >
+            <span>
+              {incident.phase === "warning"
+                ? "ROUTE WARNING"
+                : incident.phase === "active"
+                  ? "PLAN INTERRUPTED"
+                  : "ROUTE RECOVERED"}
+            </span>
+            <b>{incident.title}</b>
+            <small>
+              {incident.phase === "warning"
+                ? incident.warning
+                : incident.phase === "active"
+                  ? `${incident.active} · ETA 損失 ${incident.penaltySeconds.toFixed(1)} 秒`
+                  : incident.cleared}
+            </small>
+            <i>
+              <em style={{ width: `${incident.progress * 100}%` }} />
+            </i>
+          </div>
+        )}
+
         <div className="chase-cinematic-label" aria-hidden="true">
           <span>
             {lookBack
               ? "回頭確認"
+              : incident?.phase === "active"
+                ? "突發事件"
+                : observationDirection !== "forward"
+                  ? "主動觀察"
               : arrivalVisible
                 ? "節點接近"
                 : "路線執行中"}
@@ -2009,6 +2370,12 @@ function RunningScreen({
           <b>
             {lookBack
               ? "牠還在後面"
+              : incident?.phase === "active"
+                ? incident.title
+                : observationDirection === "left"
+                  ? "掃視左側牆面"
+                  : observationDirection === "right"
+                    ? "掃視右側牆面"
               : chaseState === "close"
                 ? "不要回頭"
                 : arrivalVisible
@@ -2019,7 +2386,9 @@ function RunningScreen({
 
         <div
           className={`node-arrival-card node-kind-${nodeSceneKind} ${
-            arrivalVisible && !lookBack ? "visible" : ""
+            arrivalVisible && !lookBack && !incident
+              ? "visible"
+              : ""
           }`}
           aria-live="polite"
         >
@@ -2031,14 +2400,26 @@ function RunningScreen({
         {activeClue && (
           <button
             type="button"
-            className={`clue-target clue-wall-${activeClue.id}`}
-            onClick={onFocus}
+            className={`clue-target clue-wall-${activeClue.id} ${
+              clueAligned ? "aligned" : "glimpsed"
+            }`}
+            onClick={focusClueFromScene}
             aria-label={`聚焦${activeClue.eyebrow}`}
           >
             <span className="clue-rings" />
             <b>{activeClue.icon}</b>
-            <small>讀取牆面</small>
+            <small>
+              {clueAligned
+                ? "Space 讀取"
+                : `${clueDirection === "left" ? "左牆 A" : "右牆 D"}`}
+            </small>
           </button>
+        )}
+
+        {observationFeedback && (
+          <div className="observation-feedback" role="status">
+            {observationFeedback}
+          </div>
         )}
 
         {focusedClue && (
@@ -2078,13 +2459,17 @@ function RunningScreen({
       </div>
 
       <div className="run-tip">
-        <span className={activeClue ? "alert" : ""}>
-          {activeClue ? "!" : "◎"}
+        <span className={activeClue || incident ? "alert" : ""}>
+          {activeClue || incident ? "!" : "◎"}
         </span>
         <p>
           {activeClue
-            ? "點擊畫面中的提示，或按 Space 聚焦。"
-            : "右上角後視鏡會持續顯示威脅；按住 B 或眼睛按鈕可回頭看清怪物。"}
+            ? `提示位於${clueDirection === "left" ? "左" : "右"}牆；按住 ${clueDirection === "left" ? "A" : "D"} 觀察，再按 Space 記住。`
+            : incident?.phase === "warning"
+              ? `${incident.warning}；事件有預警，不會直接改寫你的路線。`
+              : incident?.phase === "active"
+                ? incident.active
+                : "按住 A／D 觀察兩側牆面；按住 B 回頭確認怪物距離。"}
         </p>
       </div>
     </div>
