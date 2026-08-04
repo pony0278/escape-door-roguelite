@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "逃生門計畫｜Phase P1.0",
-  description: "固定關卡的 2D 逃生核心循環原型：規劃、觀察、記憶、倒數解鎖。",
+  title: "逃生門計畫｜Phase P2.5.2",
+  description: "一筆畫逃亡路線與第三人稱觀察原型：地圖角度同步、前向淨空、倒數解鎖。",
   other: {
     "codex-preview": "development",
   },
