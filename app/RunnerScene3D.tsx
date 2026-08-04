@@ -5,6 +5,9 @@ import * as THREE from "three";
 
 type TurnDirection = -1 | 0 | 1;
 type ClueKind = "turn" | "knock" | null;
+type ObservationDirection = "forward" | "left" | "right";
+type RunIncidentKind = "blackout" | "steam" | "collapse" | null;
+type RunIncidentPhase = "warning" | "active" | "cleared" | null;
 
 export interface SceneTuning {
   exposure: number;
@@ -39,15 +42,20 @@ export const DEFAULT_SCENE_TUNING: SceneTuning = {
 interface RunnerScene3DProps {
   progress: number;
   turn: TurnDirection;
+  turnAngle: number;
   monsterPressure: number;
   monsterDistance: number;
   lookBack: boolean;
+  observationDirection: ObservationDirection;
   segmentProgress: number;
   nodeSceneKind: RouteNodeSceneKind;
   nodeLabel: string;
   clueActive: boolean;
   clueKind: ClueKind;
   clueText: string;
+  incidentKind: RunIncidentKind;
+  incidentPhase: RunIncidentPhase;
+  incidentProgress: number;
   tuning: SceneTuning;
   paused: boolean;
 }
@@ -56,6 +64,17 @@ const CHUNK_LENGTH = 18;
 const CHUNK_COUNT = 7;
 const RUN_SPEED = 12.5;
 const CORRIDOR_HALF_WIDTH = 6.1;
+const TURN_RUN_LENGTH = 52;
+const TURN_PATH_START = 32;
+const TURN_RADIUS = 10.5;
+const TURN_OUTER_RADIUS = TURN_RADIUS + CORRIDOR_HALF_WIDTH;
+const TURN_INNER_RADIUS = TURN_RADIUS - CORRIDOR_HALF_WIDTH;
+const TURN_MAX_WALL_SEGMENTS = 16;
+const TURN_CAMERA_LOOKAHEAD = 0.07;
+const TURN_FORWARD_CLEARANCE = 13;
+const TURN_NODE_LEAD = TURN_PATH_START - TURN_RADIUS + 8;
+const CAMERA_TRAIL_DISTANCE = 8.6;
+const CAMERA_MIN_DISTANCE = 1.8;
 
 function makeConcreteTexture(
   renderer: THREE.WebGLRenderer,
@@ -251,15 +270,20 @@ function makeNodeLabelTexture(label: string, kind: RouteNodeSceneKind) {
 export default function RunnerScene3D({
   progress,
   turn,
+  turnAngle,
   monsterPressure,
   monsterDistance,
   lookBack,
+  observationDirection,
   segmentProgress,
   nodeSceneKind,
   nodeLabel,
   clueActive,
   clueKind,
   clueText,
+  incidentKind,
+  incidentPhase,
+  incidentProgress,
   tuning,
   paused,
 }: RunnerScene3DProps) {
@@ -267,15 +291,20 @@ export default function RunnerScene3D({
   const sceneStateRef = useRef({
     progress,
     turn,
+    turnAngle,
     monsterPressure,
     monsterDistance,
     lookBack,
+    observationDirection,
     segmentProgress,
     nodeSceneKind,
     nodeLabel,
     clueActive,
     clueKind,
     clueText,
+    incidentKind,
+    incidentPhase,
+    incidentProgress,
     tuning,
     paused,
   });
@@ -284,15 +313,20 @@ export default function RunnerScene3D({
     sceneStateRef.current = {
       progress,
       turn,
+      turnAngle,
       monsterPressure,
       monsterDistance,
       lookBack,
+      observationDirection,
       segmentProgress,
       nodeSceneKind,
       nodeLabel,
       clueActive,
       clueKind,
       clueText,
+      incidentKind,
+      incidentPhase,
+      incidentProgress,
       tuning,
       paused,
     };
@@ -300,16 +334,21 @@ export default function RunnerScene3D({
     clueActive,
     clueKind,
     clueText,
+    incidentKind,
+    incidentPhase,
+    incidentProgress,
     lookBack,
     monsterDistance,
     monsterPressure,
     nodeLabel,
     nodeSceneKind,
+    observationDirection,
     paused,
     progress,
     segmentProgress,
     tuning,
     turn,
+    turnAngle,
   ]);
 
   useEffect(() => {
@@ -386,6 +425,8 @@ export default function RunnerScene3D({
 
     const dangerLight = new THREE.PointLight(0xb92018, 0, 9, 2);
     scene.add(dangerLight);
+    const incidentLight = new THREE.PointLight(0xd38a49, 0, 18, 1.7);
+    scene.add(incidentLight);
 
     const gradientData = new Uint8Array([22, 72, 132, 220]);
     const gradientMap = new THREE.DataTexture(
@@ -593,66 +634,235 @@ export default function RunnerScene3D({
       createCorridorChunk(index);
     }
 
-    const turnSetPiece = new THREE.Group();
-    turnSetPiece.visible = false;
-    scene.add(turnSetPiece);
+    const turnRig = new THREE.Group();
+    turnRig.visible = false;
+    scene.add(turnRig);
+    const turnOutgoingRig = new THREE.Group();
+    turnRig.add(turnOutgoingRig);
+    const turnCameraOccluders: THREE.Mesh[] = [];
 
-    const turnBulkhead = new THREE.Group();
-    turnSetPiece.add(turnBulkhead);
-    addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 6.15, 0.48),
-      wallMaterial,
-      turnBulkhead,
-      [0, 3.03, -0.25],
-    );
-    addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2 - 0.5, 2.1, 0.04),
-      tileMaterial,
-      turnBulkhead,
-      [0, 1.05, 0.01],
-    );
-    addMesh(
-      new THREE.BoxGeometry(4.6, 0.16, 0.22),
-      toon(0x9f9a78),
-      turnBulkhead,
-      [0, 5.32, 0.1],
-    );
-
-    const branchCorridor = new THREE.Group();
-    turnSetPiece.add(branchCorridor);
-    addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 0.34, 30),
-      floorMaterial,
-      branchCorridor,
-      [0, -0.17, -14.5],
-    );
-    addMesh(
-      new THREE.BoxGeometry(CORRIDOR_HALF_WIDTH * 2, 0.38, 30),
-      ceilingMaterial,
-      branchCorridor,
-      [0, 6.12, -14.5],
-    );
-    for (const side of [-1, 1]) {
-      addMesh(
-        new THREE.BoxGeometry(0.5, 6.2, 30),
+    const addTurnWall = (
+      geometry: THREE.BufferGeometry,
+      position: [number, number, number],
+      rotation: [number, number, number] = [0, 0, 0],
+      parent: THREE.Object3D = turnRig,
+    ) => {
+      const wall = addMesh(
+        geometry,
         wallMaterial,
-        branchCorridor,
-        [side * CORRIDOR_HALF_WIDTH, 3.03, -14.5],
+        parent,
+        position,
+        rotation,
+      );
+      turnCameraOccluders.push(wall);
+      return wall;
+    };
+
+    const turnStraightLength = TURN_RUN_LENGTH - TURN_RADIUS;
+    const turnStraightCenter = TURN_RADIUS + turnStraightLength / 2;
+    for (const parent of [turnRig, turnOutgoingRig]) {
+      const outgoing = parent === turnOutgoingRig;
+      const centerZ = outgoing ? -turnStraightLength / 2 : turnStraightCenter;
+      addMesh(
+        new THREE.BoxGeometry(
+          CORRIDOR_HALF_WIDTH * 2,
+          0.34,
+          turnStraightLength,
+        ),
+        floorMaterial,
+        parent,
+        [0, -0.17, centerZ],
       );
       addMesh(
-        new THREE.BoxGeometry(0.04, 2.15, 29.8),
-        tileMaterial,
-        branchCorridor,
-        [side * (CORRIDOR_HALF_WIDTH - 0.27), 1.08, -14.5],
+        new THREE.BoxGeometry(
+          CORRIDOR_HALF_WIDTH * 2,
+          0.38,
+          turnStraightLength,
+        ),
+        ceilingMaterial,
+        parent,
+        [0, 6.12, centerZ],
       );
+      for (const side of [-1, 1]) {
+        addTurnWall(
+          new THREE.BoxGeometry(0.5, 6.2, turnStraightLength),
+          [side * CORRIDOR_HALF_WIDTH, 3.03, centerZ],
+          [0, 0, 0],
+          parent,
+        );
+        addMesh(
+          new THREE.BoxGeometry(0.04, 2.15, turnStraightLength - 0.2),
+          tileMaterial,
+          parent,
+          [side * (CORRIDOR_HALF_WIDTH - 0.27), 1.08, centerZ],
+        );
+      }
     }
-    for (const z of [-5, -15, -25]) {
+
+    const arcFloor = addMesh(
+      new THREE.RingGeometry(
+        TURN_INNER_RADIUS,
+        TURN_OUTER_RADIUS,
+        18,
+        1,
+        Math.PI / 2,
+        Math.PI / 2,
+      ),
+      floorMaterial,
+      turnRig,
+      [TURN_RADIUS, -0.16, TURN_RADIUS],
+      [-Math.PI / 2, 0, 0],
+    );
+    const arcCeiling = addMesh(
+      new THREE.RingGeometry(
+        TURN_INNER_RADIUS,
+        TURN_OUTER_RADIUS,
+        18,
+        1,
+        Math.PI,
+        Math.PI / 2,
+      ),
+      ceilingMaterial,
+      turnRig,
+      [TURN_RADIUS, 6.11, TURN_RADIUS],
+      [Math.PI / 2, 0, 0],
+    );
+
+    const turnArcWalls = Array.from(
+      { length: TURN_MAX_WALL_SEGMENTS },
+      () => ({
+        outer: addTurnWall(new THREE.BoxGeometry(1, 6.2, 0.5), [0, 3.03, 0]),
+        inner: addTurnWall(new THREE.BoxGeometry(1, 6.2, 0.5), [0, 3.03, 0]),
+        outerTile: addMesh(
+          new THREE.BoxGeometry(1, 2.15, 0.04),
+          tileMaterial,
+          turnRig,
+          [0, 1.08, 0],
+        ),
+        innerTile: addMesh(
+          new THREE.BoxGeometry(1, 2.15, 0.04),
+          tileMaterial,
+          turnRig,
+          [0, 1.08, 0],
+        ),
+      }),
+    );
+
+    let renderedTurnAngle = -1;
+    function updateTurnGeometry(angle: number) {
+      const boundedAngle = THREE.MathUtils.clamp(
+        angle,
+        Math.PI / 36,
+        Math.PI * 0.85,
+      );
+      if (Math.abs(renderedTurnAngle - boundedAngle) < 0.001) return;
+      renderedTurnAngle = boundedAngle;
+
+      const surfaceSegments = Math.max(
+        8,
+        Math.ceil(THREE.MathUtils.radToDeg(boundedAngle) / 6),
+      );
+      arcFloor.geometry.dispose();
+      arcFloor.geometry = new THREE.RingGeometry(
+        TURN_INNER_RADIUS,
+        TURN_OUTER_RADIUS,
+        surfaceSegments,
+        1,
+        Math.PI - boundedAngle,
+        boundedAngle,
+      );
+      arcCeiling.geometry.dispose();
+      arcCeiling.geometry = new THREE.RingGeometry(
+        TURN_INNER_RADIUS,
+        TURN_OUTER_RADIUS,
+        surfaceSegments,
+        1,
+        Math.PI,
+        boundedAngle,
+      );
+
+      const exitX = TURN_RADIUS * (1 - Math.cos(boundedAngle));
+      const exitZ = TURN_RADIUS * (1 - Math.sin(boundedAngle));
+      turnOutgoingRig.position.set(exitX, 0, exitZ);
+      turnOutgoingRig.rotation.y = -boundedAngle;
+
+      const activeSegments = Math.min(
+        TURN_MAX_WALL_SEGMENTS,
+        Math.max(
+          2,
+          Math.ceil(boundedAngle / (Math.PI / 18)),
+        ),
+      );
+      const step = boundedAngle / activeSegments;
+      turnArcWalls.forEach((segment, index) => {
+        const visible = index < activeSegments;
+        for (const mesh of Object.values(segment)) mesh.visible = visible;
+        if (!visible) return;
+
+        const middleAngle = Math.PI + (index + 0.5) * step;
+        const rotationY = Math.PI * 1.5 - middleAngle;
+        const setSegment = (
+          mesh: THREE.Mesh,
+          radius: number,
+          overlap: number,
+        ) => {
+          mesh.position.set(
+            TURN_RADIUS + radius * Math.cos(middleAngle),
+            mesh.position.y,
+            TURN_RADIUS + radius * Math.sin(middleAngle),
+          );
+          mesh.rotation.y = rotationY;
+          mesh.scale.set(
+            2 * radius * Math.sin(step / 2) + overlap,
+            1,
+            1,
+          );
+        };
+        setSegment(segment.outer, TURN_OUTER_RADIUS, 0.16);
+        setSegment(segment.inner, TURN_INNER_RADIUS, 0.08);
+        setSegment(segment.outerTile, TURN_OUTER_RADIUS - 0.27, 0.12);
+        setSegment(segment.innerTile, TURN_INNER_RADIUS + 0.27, 0.08);
+      });
+      mount!.dataset.turnAngle = `${Math.round(
+        THREE.MathUtils.radToDeg(boundedAngle),
+      )}`;
+    }
+
+    updateTurnGeometry(Math.PI / 2);
+
+    for (const z of [16, 28, 40]) {
       addMesh(
         new THREE.BoxGeometry(2.7, 0.12, 0.62),
         toon(0xa39c78),
-        branchCorridor,
+        turnRig,
         [0, 5.92, z],
       );
+      const incomingLight = new THREE.PointLight(
+        0xc6c09d,
+        DEFAULT_SCENE_TUNING.ceiling,
+        14,
+        1.85,
+      );
+      incomingLight.position.set(0, 5.65, z);
+      turnRig.add(incomingLight);
+      ceilingLights.push(incomingLight);
+    }
+    for (const z of [-8, -20, -32]) {
+      addMesh(
+        new THREE.BoxGeometry(2.7, 0.12, 0.62),
+        toon(0xa39c78),
+        turnOutgoingRig,
+        [0, 5.92, z],
+      );
+      const outgoingLight = new THREE.PointLight(
+        0xc6c09d,
+        DEFAULT_SCENE_TUNING.ceiling,
+        14,
+        1.85,
+      );
+      outgoingLight.position.set(0, 5.65, z);
+      turnOutgoingRig.add(outgoingLight);
+      ceilingLights.push(outgoingLight);
     }
 
     const nodeSceneRoot = new THREE.Group();
@@ -938,6 +1148,57 @@ export default function RunnerScene3D({
     exitLight.position.set(0, 4.75, -0.2);
     exitScene.add(exitLight);
 
+    const collapseObstacle = new THREE.Group();
+    collapseObstacle.visible = false;
+    scene.add(collapseObstacle);
+    for (const [x, y, z, sx, sy, sz, rotation] of [
+      [-2.2, 0.45, 0.4, 2.1, 0.9, 1.4, -0.18],
+      [-0.3, 0.72, -0.1, 1.7, 1.35, 1.1, 0.24],
+      [1.25, 0.38, 0.35, 1.25, 0.72, 1.45, -0.36],
+      [-1.15, 1.35, 0.2, 0.85, 1.55, 0.8, 0.58],
+    ] as const) {
+      addMesh(
+        new THREE.DodecahedronGeometry(0.72, 0),
+        toon(0x555a55),
+        collapseObstacle,
+        [x, y, z],
+        [rotation * 0.4, rotation, rotation * 0.7],
+        [sx, sy, sz],
+      );
+    }
+    addMesh(
+      new THREE.BoxGeometry(4.8, 0.2, 0.2),
+      toon(0xb8903f),
+      collapseObstacle,
+      [-0.45, 1.75, -0.15],
+      [0, 0, -0.18],
+    );
+
+    const steamGeometry = new THREE.BufferGeometry();
+    const steamPoints: number[] = [];
+    for (let index = 0; index < 110; index += 1) {
+      steamPoints.push(
+        THREE.MathUtils.randFloatSpread(7.5),
+        Math.random() * 4.8 + 0.35,
+        THREE.MathUtils.randFloatSpread(8),
+      );
+    }
+    steamGeometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(steamPoints, 3),
+    );
+    const steamMaterial = new THREE.PointsMaterial({
+      color: 0xdbe1d9,
+      size: 0.34,
+      transparent: true,
+      opacity: 0.34,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const steamCloud = new THREE.Points(steamGeometry, steamMaterial);
+    steamCloud.visible = false;
+    scene.add(steamCloud);
+
     const player = new THREE.Group();
     scene.add(player);
     const bodyRoot = new THREE.Group();
@@ -1175,16 +1436,7 @@ export default function RunnerScene3D({
       });
       oldMaterial.dispose();
       clueSide = kind === "turn" ? -1 : 1;
-      wallClue.position.set(
-        clueSide * (CORRIDOR_HALF_WIDTH - 0.3),
-        3.1,
-        -14,
-      );
-      wallClue.rotation.set(
-        0,
-        clueSide < 0 ? Math.PI / 2 - 0.08 : -Math.PI / 2 + 0.08,
-        kind === "turn" ? -0.025 : 0.035,
-      );
+      cluePathDistance = 14;
       clueLight.color.set(kind === "turn" ? 0xf0d9ac : 0xc03229);
       clueLight.position.set(0, 0.2, 1.8);
     }
@@ -1216,11 +1468,23 @@ export default function RunnerScene3D({
     const rearLookTarget = new THREE.Vector3();
     const cameraLookTarget = new THREE.Vector3();
     const pathForward = new THREE.Vector3(0, 0, -1);
+    const pathRight = new THREE.Vector3(1, 0, 0);
+    const desiredCameraPosition = new THREE.Vector3();
+    const resolvedCameraPosition = new THREE.Vector3();
+    const cameraCollisionOrigin = new THREE.Vector3(0, 2.35, 0);
+    const cameraCollisionDirection = new THREE.Vector3();
+    const cameraRaycaster = new THREE.Raycaster();
+    const forwardVisibilityOrigin = new THREE.Vector3(0, 2.2, 0);
+    const forwardVisibilityDirection = new THREE.Vector3();
+    const forwardVisibilityRaycaster = new THREE.Raycaster();
     const drawingBufferSize = new THREE.Vector2();
     let elapsed = 0;
     let cameraYaw = 0;
+    let previousTurn: TurnDirection = 0;
+    let previousTurnAngle = 0;
     let previousClueActive = false;
     let clueTraveling = false;
+    let cluePathDistance = 14;
 
     const smoothStep = (from: number, to: number, value: number) => {
       const normalized = THREE.MathUtils.clamp(
@@ -1230,6 +1494,139 @@ export default function RunnerScene3D({
       );
       return normalized * normalized * (3 - 2 * normalized);
     };
+
+    function sampleTurnPath(progress: number, angle: number) {
+      const boundedAngle = THREE.MathUtils.clamp(
+        angle,
+        Math.PI / 36,
+        Math.PI * 0.85,
+      );
+      if (progress < 0.52) {
+        const phase = smoothStep(0, 0.52, progress);
+        return {
+          x: 0,
+          z: THREE.MathUtils.lerp(
+            TURN_PATH_START,
+            TURN_RADIUS,
+            phase,
+          ),
+          angle: 0,
+        };
+      }
+      if (progress < 0.8) {
+        const phase = smoothStep(0.52, 0.8, progress);
+        const pathAngle = phase * boundedAngle;
+        const theta = Math.PI + pathAngle;
+        return {
+          x: TURN_RADIUS + Math.cos(theta) * TURN_RADIUS,
+          z: TURN_RADIUS + Math.sin(theta) * TURN_RADIUS,
+          angle: pathAngle,
+        };
+      }
+      const phase = smoothStep(0.8, 1, progress);
+      const exitX = TURN_RADIUS * (1 - Math.cos(boundedAngle));
+      const exitZ = TURN_RADIUS * (1 - Math.sin(boundedAngle));
+      const outgoingDistance =
+        (TURN_PATH_START - TURN_RADIUS) * phase;
+      return {
+        x: exitX + Math.sin(boundedAngle) * outgoingDistance,
+        z: exitZ - Math.cos(boundedAngle) * outgoingDistance,
+        angle: boundedAngle,
+      };
+    }
+
+    function measureForwardClearance(yaw: number) {
+      forwardVisibilityDirection.set(
+        -Math.sin(yaw),
+        0,
+        -Math.cos(yaw),
+      );
+      forwardVisibilityRaycaster.set(
+        forwardVisibilityOrigin,
+        forwardVisibilityDirection,
+      );
+      forwardVisibilityRaycaster.near = 0;
+      forwardVisibilityRaycaster.far = 40;
+      const obstruction = forwardVisibilityRaycaster.intersectObjects(
+        turnCameraOccluders.filter((mesh) => mesh.visible),
+        false,
+      )[0];
+      return obstruction?.distance ?? Number.POSITIVE_INFINITY;
+    }
+
+    function resolveForwardCameraYaw(
+      progress: number,
+      direction: TurnDirection,
+      angle: number,
+    ) {
+      let lookAheadProgress = THREE.MathUtils.clamp(
+        progress + TURN_CAMERA_LOOKAHEAD,
+        0,
+        1,
+      );
+      let candidateYaw =
+        -direction * sampleTurnPath(lookAheadProgress, angle).angle;
+      let clearance = measureForwardClearance(candidateYaw);
+      for (
+        let attempt = 0;
+        attempt < 3 && clearance < TURN_FORWARD_CLEARANCE;
+        attempt += 1
+      ) {
+        lookAheadProgress = THREE.MathUtils.clamp(
+          lookAheadProgress + 0.045,
+          0,
+          1,
+        );
+        candidateYaw =
+          -direction * sampleTurnPath(lookAheadProgress, angle).angle;
+        clearance = measureForwardClearance(candidateYaw);
+      }
+      mount!.dataset.forwardClearance = Number.isFinite(clearance)
+        ? clearance.toFixed(1)
+        : "open";
+      return candidateYaw;
+    }
+
+    function resolveCameraCollision(
+      target: THREE.Vector3,
+      occluders: THREE.Mesh[],
+    ) {
+      cameraCollisionDirection
+        .copy(target)
+        .sub(cameraCollisionOrigin);
+      const desiredDistance = cameraCollisionDirection.length();
+      if (desiredDistance <= 0.001 || occluders.length === 0) {
+        mount!.dataset.cameraOccluded = "false";
+        return resolvedCameraPosition.copy(target);
+      }
+
+      cameraCollisionDirection.normalize();
+      cameraRaycaster.set(
+        cameraCollisionOrigin,
+        cameraCollisionDirection,
+      );
+      cameraRaycaster.near = 0;
+      cameraRaycaster.far = desiredDistance;
+      turnRig.updateMatrixWorld(true);
+      const obstruction = cameraRaycaster.intersectObjects(
+        occluders.filter((mesh) => mesh.visible),
+        false,
+      )[0];
+
+      if (!obstruction) {
+        mount!.dataset.cameraOccluded = "false";
+        return resolvedCameraPosition.copy(target);
+      }
+
+      const safeDistance = Math.max(
+        CAMERA_MIN_DISTANCE,
+        obstruction.distance - 0.38,
+      );
+      mount!.dataset.cameraOccluded = "true";
+      return resolvedCameraPosition
+        .copy(cameraCollisionOrigin)
+        .addScaledVector(cameraCollisionDirection, safeDistance);
+    }
 
     function resize() {
       const width = Math.max(1, mount!.clientWidth);
@@ -1301,11 +1698,27 @@ export default function RunnerScene3D({
       if (disposed) return;
       const dt = Math.min(clock.getDelta(), 0.033);
       const current = sceneStateRef.current;
+      const incidentActive = current.incidentPhase === "active";
+      const incidentWarning = current.incidentPhase === "warning";
+      const incidentEnvelope = incidentActive
+        ? Math.pow(
+            Math.max(0, Math.sin(current.incidentProgress * Math.PI)),
+            0.42,
+          )
+        : incidentWarning
+          ? current.incidentProgress * 0.28
+          : 0;
+      const blackoutStrength =
+        current.incidentKind === "blackout" ? incidentEnvelope : 0;
+      const steamStrength =
+        current.incidentKind === "steam" ? incidentEnvelope : 0;
 
       renderer.toneMappingExposure = current.tuning.exposure;
-      ambient.intensity = current.tuning.ambient;
+      ambient.intensity =
+        current.tuning.ambient * (1 - blackoutStrength * 0.58);
       if (scene.fog instanceof THREE.FogExp2) {
-        scene.fog.density = current.tuning.fog;
+        scene.fog.density =
+          current.tuning.fog * (1 + steamStrength * 2.6);
       }
       wallMaterial.color
         .copy(wallBaseColor)
@@ -1320,18 +1733,37 @@ export default function RunnerScene3D({
         .copy(ceilingBaseColor)
         .multiplyScalar(current.tuning.concrete);
       ceilingLights.forEach((light, index) => {
+        const blackoutFlicker =
+          current.incidentKind === "blackout" && incidentActive
+            ? Math.sin(elapsed * 21 + index * 1.9) > 0.18
+              ? 0.08
+              : 0.34
+            : 1;
         if (index % 3 === 1) {
           light.intensity =
             Math.sin(elapsed * 13 + index * 2.3) > 0.74
-              ? current.tuning.ceiling * 0.44
-              : current.tuning.ceiling * 0.11;
+              ? current.tuning.ceiling * 0.44 * blackoutFlicker
+              : current.tuning.ceiling * 0.11 * blackoutFlicker;
         } else {
-          light.intensity = current.tuning.ceiling;
+          light.intensity = current.tuning.ceiling * blackoutFlicker;
         }
       });
       flashlight.intensity =
-        current.tuning.flashlight + Math.sin(elapsed * 1.7) * 0.4 -
+        current.tuning.flashlight * (1 + blackoutStrength * 0.12) +
+        Math.sin(elapsed * 1.7) * 0.4 -
         current.monsterPressure * 0.75;
+      incidentLight.color.set(
+        current.incidentKind === "blackout"
+          ? 0xb52b21
+          : current.incidentKind === "steam"
+            ? 0x9bc9ca
+            : 0xd38a49,
+      );
+      incidentLight.intensity =
+        incidentEnvelope *
+        (current.incidentKind === "blackout"
+          ? 1.35 + Math.max(0, Math.sin(elapsed * 9)) * 0.8
+          : 1.1);
 
       if (current.paused) {
         renderChaseScene(current.lookBack);
@@ -1340,18 +1772,94 @@ export default function RunnerScene3D({
 
       elapsed += dt;
       const swing = Math.sin(elapsed * 11.5) * 0.74;
-      const turnPhase =
-        current.turn === 0
-          ? 0
-          : smoothStep(0.54, 0.94, current.segmentProgress);
-      const targetCameraYaw = -current.turn * turnPhase * Math.PI * 0.42;
+      const turnActive = current.turn !== 0;
+      const turnPath = sampleTurnPath(
+        current.segmentProgress,
+        current.turnAngle,
+      );
+      const runnerYaw = turnActive
+        ? -current.turn * turnPath.angle
+        : 0;
+
+      if (
+        current.turn !== previousTurn ||
+        Math.abs(current.turnAngle - previousTurnAngle) > 0.01
+      ) {
+        cameraYaw = 0;
+        camera.position.set(0, 4.8, CAMERA_TRAIL_DISTANCE);
+        previousTurn = current.turn;
+        previousTurnAngle = current.turnAngle;
+      }
+
+      world.visible = !turnActive;
+      turnRig.visible = turnActive;
+      if (turnActive) {
+        updateTurnGeometry(current.turnAngle);
+        turnRig.scale.set(current.turn, 1, 1);
+        turnRig.position.set(
+          -current.turn * turnPath.x,
+          0,
+          -turnPath.z,
+        );
+        turnRig.updateMatrixWorld(true);
+      }
+
+      const targetCameraYaw = turnActive
+        ? resolveForwardCameraYaw(
+            current.segmentProgress,
+            current.turn,
+            current.turnAngle,
+          )
+        : 0;
+      if (!turnActive) mount!.dataset.forwardClearance = "open";
       cameraYaw = THREE.MathUtils.damp(
         cameraYaw,
         targetCameraYaw,
-        6.4,
+        12.5,
         dt,
       );
       pathForward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+      pathRight.set(-pathForward.z, 0, pathForward.x);
+      const observationSide =
+        current.observationDirection === "left"
+          ? -1
+          : current.observationDirection === "right"
+            ? 1
+            : 0;
+
+      const incidentDistance = THREE.MathUtils.lerp(
+        18,
+        -5,
+        current.incidentProgress,
+      );
+      collapseObstacle.visible = Boolean(
+        current.incidentKind === "collapse" && incidentActive,
+      );
+      if (collapseObstacle.visible) {
+        collapseObstacle.position.set(
+          pathForward.x * incidentDistance + pathRight.x * -1.15,
+          0,
+          pathForward.z * incidentDistance + pathRight.z * -1.15,
+        );
+        collapseObstacle.rotation.y = cameraYaw;
+      }
+      steamCloud.visible = Boolean(
+        current.incidentKind === "steam" && incidentActive,
+      );
+      if (steamCloud.visible) {
+        steamCloud.position.set(
+          pathForward.x * 5.5 + pathRight.x * 1.8,
+          0,
+          pathForward.z * 5.5 + pathRight.z * 1.8,
+        );
+        steamCloud.rotation.y = cameraYaw + elapsed * 0.08;
+        steamMaterial.opacity = 0.18 + steamStrength * 0.38;
+      }
+      incidentLight.position.set(
+        pathForward.x * 6 + pathRight.x * 2.5,
+        3.2,
+        pathForward.z * 6 + pathRight.z * 2.5,
+      );
 
       updateNodeLabel(current.nodeLabel, current.nodeSceneKind);
       for (const kind of Object.keys(
@@ -1360,27 +1868,34 @@ export default function RunnerScene3D({
         nodeSceneGroups[kind].visible = kind === current.nodeSceneKind;
       }
       const nodeApproach = smoothStep(0.06, 1, current.segmentProgress);
-      const nodeDistance = THREE.MathUtils.lerp(48, 8.5, nodeApproach);
       nodeSceneRoot.visible = current.segmentProgress > 0.04;
-      nodeSceneRoot.position.set(
-        pathForward.x * nodeDistance,
-        0,
-        pathForward.z * nodeDistance,
-      );
-      nodeSceneRoot.rotation.y = cameraYaw;
+      if (turnActive) {
+        const exitX = TURN_RADIUS * (1 - Math.cos(current.turnAngle));
+        const exitZ = TURN_RADIUS * (1 - Math.sin(current.turnAngle));
+        const nodeX =
+          exitX + Math.sin(current.turnAngle) * TURN_NODE_LEAD;
+        const nodeZ =
+          exitZ - Math.cos(current.turnAngle) * TURN_NODE_LEAD;
+        nodeSceneRoot.position.set(
+          current.turn * (nodeX - turnPath.x),
+          0,
+          nodeZ - turnPath.z,
+        );
+        nodeSceneRoot.rotation.y =
+          -current.turn * current.turnAngle;
+      } else {
+        const nodeDistance = THREE.MathUtils.lerp(
+          48,
+          8.5,
+          nodeApproach,
+        );
+        nodeSceneRoot.position.set(0, 0, -nodeDistance);
+        nodeSceneRoot.rotation.y = 0;
+      }
       nodeSceneRoot.scale.setScalar(
         THREE.MathUtils.lerp(0.82, 1, nodeApproach),
       );
 
-      turnSetPiece.visible = current.turn !== 0;
-      turnSetPiece.position.set(
-        0,
-        0,
-        THREE.MathUtils.lerp(-48, -8.2, nodeApproach),
-      );
-      branchCorridor.rotation.y = -current.turn * Math.PI / 2;
-      turnBulkhead.rotation.z =
-        Math.sin(elapsed * 0.7) * 0.002 * current.turn;
       machineFan.rotation.z -= dt * 1.9;
       valveWheel.rotation.z =
         Math.sin(elapsed * 0.8) * 0.12 + current.segmentProgress * 0.35;
@@ -1397,23 +1912,42 @@ export default function RunnerScene3D({
       leftArmPivot.rotation.x = -swing * 0.82;
       rightArmPivot.rotation.x = swing * 0.82;
       bodyRoot.position.y = 0.06 + Math.abs(Math.sin(elapsed * 11.5)) * 0.07;
+      const turnPhase = turnActive
+        ? THREE.MathUtils.clamp(
+            turnPath.angle / Math.max(0.001, current.turnAngle),
+            0,
+            1,
+          )
+        : 0;
       bodyRoot.rotation.z = THREE.MathUtils.damp(
         bodyRoot.rotation.z,
-        current.turn * -0.075,
+        current.turn *
+          -0.075 *
+          Math.sin(turnPhase * Math.PI),
         5,
         dt,
       );
       headRoot.rotation.z = Math.sin(elapsed * 5.5) * 0.025;
+      headRoot.rotation.y = THREE.MathUtils.damp(
+        headRoot.rotation.y,
+        observationSide * -0.48,
+        9,
+        dt,
+      );
 
+      const collapseDodge =
+        current.incidentKind === "collapse" && incidentActive
+          ? Math.sin(current.incidentProgress * Math.PI) * 1.65
+          : 0;
       player.position.x = THREE.MathUtils.damp(
         player.position.x,
-        current.turn * 0.34,
-        4.5,
+        collapseDodge,
+        8,
         dt,
       );
       player.rotation.y = THREE.MathUtils.damp(
         player.rotation.y,
-        cameraYaw,
+        runnerYaw,
         8,
         dt,
       );
@@ -1428,20 +1962,27 @@ export default function RunnerScene3D({
 
       world.rotation.y = THREE.MathUtils.damp(
         world.rotation.y,
-        current.turn * turnPhase * -0.012,
-        3.6,
+        0,
+        8,
         dt,
       );
       world.position.x = THREE.MathUtils.damp(
         world.position.x,
-        current.turn * turnPhase * -0.14,
-        3.6,
+        0,
+        8,
         dt,
       );
 
+      const monsterBehindDistance =
+        7.15 - current.monsterPressure * 0.45;
+      const monsterLateral =
+        -3.05 + current.monsterPressure * 0.48;
       const targetMonsterX =
-        -3.05 + current.turn * 0.16 + current.monsterPressure * 0.48;
-      const targetMonsterZ = 7.15 - current.monsterPressure * 0.45;
+        -pathForward.x * monsterBehindDistance +
+        pathRight.x * monsterLateral;
+      const targetMonsterZ =
+        -pathForward.z * monsterBehindDistance +
+        pathRight.z * monsterLateral;
       const targetMonsterScale = 0.78 + current.monsterPressure * 0.08;
       monster.position.x = THREE.MathUtils.damp(
         monster.position.x,
@@ -1483,10 +2024,27 @@ export default function RunnerScene3D({
       previousClueActive = current.clueActive;
 
       if (clueTraveling) {
-        wallClue.position.z += RUN_SPEED * dt;
+        cluePathDistance -= RUN_SPEED * dt;
+        wallClue.position.set(
+          pathForward.x * cluePathDistance +
+            pathRight.x *
+              clueSide *
+              (CORRIDOR_HALF_WIDTH - 0.3),
+          3.1,
+          pathForward.z * cluePathDistance +
+            pathRight.z *
+              clueSide *
+              (CORRIDOR_HALF_WIDTH - 0.3),
+        );
+        wallClue.rotation.set(
+          0,
+          cameraYaw -
+            clueSide * (Math.PI / 2 - 0.08),
+          current.clueKind === "turn" ? -0.025 : 0.035,
+        );
         clueLight.intensity =
           1.1 + Math.max(0, Math.sin(elapsed * 6.2)) * 0.55;
-        if (!current.clueActive || wallClue.position.z > 4.8) {
+        if (!current.clueActive || cluePathDistance < -4.8) {
           wallClue.visible = false;
           clueTraveling = false;
           clueLight.intensity = 0;
@@ -1495,49 +2053,51 @@ export default function RunnerScene3D({
 
       dust.position.z += RUN_SPEED * dt * 0.44;
       if (dust.position.z > 18) dust.position.z = 0;
+      dust.rotation.y = cameraYaw;
 
-      const cameraTargetX = player.position.x - pathForward.x * 9.2;
-      const cameraTargetZ = -pathForward.z * 9.2;
-      camera.position.x = THREE.MathUtils.damp(
-        camera.position.x,
-        cameraTargetX,
-        7,
-        dt,
+      const cornerCompression = turnActive
+        ? Math.sin(turnPhase * Math.PI)
+        : 0;
+      const cameraTrailDistance = THREE.MathUtils.lerp(
+        CAMERA_TRAIL_DISTANCE,
+        5.3,
+        cornerCompression,
       );
-      camera.position.y =
+      desiredCameraPosition.set(
+        -pathForward.x * cameraTrailDistance,
         4.8 + Math.sin(elapsed * 11.5) * 0.022 +
-        current.monsterPressure * 0.06;
-      camera.position.z = THREE.MathUtils.damp(
-        camera.position.z,
-        cameraTargetZ,
-        7,
-        dt,
+          current.monsterPressure * 0.06,
+        -pathForward.z * cameraTrailDistance,
+      );
+      const safeCameraPosition = turnActive
+        ? resolveCameraCollision(
+            desiredCameraPosition,
+            turnCameraOccluders,
+          )
+        : resolvedCameraPosition.copy(desiredCameraPosition);
+      if (!turnActive) {
+        mount!.dataset.cameraOccluded = "false";
+      }
+      const cameraFollowAlpha = 1 - Math.exp(-12 * dt);
+      camera.position.lerp(
+        safeCameraPosition,
+        cameraFollowAlpha,
       );
       cameraLookTarget.set(
-        player.position.x + pathForward.x * 6.4,
-        1.55,
-        pathForward.z * 6.4,
+        pathForward.x * 6.4 + pathRight.x * observationSide * 5.1,
+        observationSide === 0 ? 1.55 : 2.25,
+        pathForward.z * 6.4 + pathRight.z * observationSide * 5.1,
       );
       camera.lookAt(cameraLookTarget);
 
-      rearCamera.position.x = THREE.MathUtils.damp(
-        rearCamera.position.x,
-        player.position.x * 0.94,
-        8,
-        dt,
-      );
+      rearCamera.position.x = -pathForward.x * 1.1;
       rearCamera.position.y = THREE.MathUtils.damp(
         rearCamera.position.y,
         3.05,
         8,
         dt,
       );
-      rearCamera.position.z = THREE.MathUtils.damp(
-        rearCamera.position.z,
-        1.1,
-        8,
-        dt,
-      );
+      rearCamera.position.z = -pathForward.z * 1.1;
       rearLookTarget.set(
         monster.position.x,
         2.05 + monster.position.y,
@@ -1553,20 +2113,24 @@ export default function RunnerScene3D({
       rearCamera.updateProjectionMatrix();
 
       flashlight.position.set(
-        player.position.x - pathForward.x * 6.3,
+        -pathForward.x * 6.3,
         4.45,
         -pathForward.z * 6.3,
       );
-      flashlight.target.position.x =
-        player.position.x + pathForward.x * 13.5;
+      flashlight.target.position.x = pathForward.x * 13.5;
       flashlight.target.position.y = 2.05;
       flashlight.target.position.z = pathForward.z * 13.5;
+      flashlight.target.position.addScaledVector(
+        pathRight,
+        observationSide * 8.2,
+      );
 
       renderChaseScene(current.lookBack);
     }
 
     renderer.setAnimationLoop(animate);
     mount.dataset.renderState = "ready";
+    mount.dataset.turnTopology = "map-angle-arc-corner";
 
     return () => {
       disposed = true;
@@ -1587,6 +2151,8 @@ export default function RunnerScene3D({
       tileTexture?.dispose();
       dustGeometry.dispose();
       dustMaterial.dispose();
+      steamGeometry.dispose();
+      steamMaterial.dispose();
       playerShadowMaterial.dispose();
       gradientMap.dispose();
       renderer.dispose();
